@@ -48,9 +48,12 @@ def requires_basic_auth_if_no_ano(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         auth = request.authorization
-        if config.config_anonbrowse != 1:
-            if not auth or auth.type != 'basic' or not check_auth(auth.username, auth.password):
-                return authenticate()
+        if config.config_anonbrowse != 1 and (
+            not auth
+            or auth.type != 'basic'
+            or not check_auth(auth.username, auth.password)
+        ):
+            return authenticate()
         return f(*args, **kwargs)
     if config.config_login_type == constants.LOGIN_LDAP and services.ldap and config.config_anonbrowse != 1:
         return services.ldap.basic_auth_required(f)
@@ -109,13 +112,21 @@ def feed_booksindex():
     if off == 0:
         elements.append({'id': "00", 'name':_("All")})
         shift = 1
-    for entry in entries[
-                 off + shift - 1:
-                 int(off + int(config.config_books_per_page) - shift)]:
-        elements.append({'id': entry.id, 'name': entry.id})
+    elements.extend(
+        {'id': entry.id, 'name': entry.id}
+        for entry in entries[
+            off
+            + shift
+            - 1 : int(off + int(config.config_books_per_page) - shift)
+        ]
+    )
 
-    pagination = Pagination((int(off) / (int(config.config_books_per_page)) + 1), config.config_books_per_page,
-                            len(entries) + 1)
+    pagination = Pagination(
+        off / (int(config.config_books_per_page)) + 1,
+        config.config_books_per_page,
+        len(entries) + 1,
+    )
+
     return render_xml_template('feed.xml',
                                letterelements=elements,
                                folder='opds.feed_letter_books',
@@ -170,10 +181,9 @@ def feed_hot():
     all_books = ub.session.query(ub.Downloads, func.count(ub.Downloads.book_id)).order_by(
         func.count(ub.Downloads.book_id).desc()).group_by(ub.Downloads.book_id)
     hot_books = all_books.offset(off).limit(config.config_books_per_page)
-    entries = list()
+    entries = []
     for book in hot_books:
-        downloadBook = calibre_db.get_book(book.Downloads.book_id)
-        if downloadBook:
+        if downloadBook := calibre_db.get_book(book.Downloads.book_id):
             entries.append(
                 calibre_db.get_filtered_book(book.Downloads.book_id)
             )
@@ -198,13 +208,21 @@ def feed_authorindex():
     if off == 0:
         elements.append({'id': "00", 'name':_("All")})
         shift = 1
-    for entry in entries[
-                 off + shift - 1:
-                 int(off + int(config.config_books_per_page) - shift)]:
-        elements.append({'id': entry.id, 'name': entry.id})
+    elements.extend(
+        {'id': entry.id, 'name': entry.id}
+        for entry in entries[
+            off
+            + shift
+            - 1 : int(off + int(config.config_books_per_page) - shift)
+        ]
+    )
 
-    pagination = Pagination((int(off) / (int(config.config_books_per_page)) + 1), config.config_books_per_page,
-                            len(entries) + 1)
+    pagination = Pagination(
+        off / (int(config.config_books_per_page)) + 1,
+        config.config_books_per_page,
+        len(entries) + 1,
+    )
+
     return render_xml_template('feed.xml',
                                letterelements=elements,
                                folder='opds.feed_letter_author',
@@ -275,13 +293,21 @@ def feed_categoryindex():
     if off == 0:
         elements.append({'id': "00", 'name':_("All")})
         shift = 1
-    for entry in entries[
-                 off + shift - 1:
-                 int(off + int(config.config_books_per_page) - shift)]:
-        elements.append({'id': entry.id, 'name': entry.id})
+    elements.extend(
+        {'id': entry.id, 'name': entry.id}
+        for entry in entries[
+            off
+            + shift
+            - 1 : int(off + int(config.config_books_per_page) - shift)
+        ]
+    )
 
-    pagination = Pagination((int(off) / (int(config.config_books_per_page)) + 1), config.config_books_per_page,
-                            len(entries) + 1)
+    pagination = Pagination(
+        off / (int(config.config_books_per_page)) + 1,
+        config.config_books_per_page,
+        len(entries) + 1,
+    )
+
     return render_xml_template('feed.xml',
                                letterelements=elements,
                                folder='opds.feed_letter_category',
@@ -327,12 +353,21 @@ def feed_seriesindex():
     if off == 0:
         elements.append({'id': "00", 'name':_("All")})
         shift = 1
-    for entry in entries[
-                 off + shift - 1:
-                 int(off + int(config.config_books_per_page) - shift)]:
-        elements.append({'id': entry.id, 'name': entry.id})
-    pagination = Pagination((int(off) / (int(config.config_books_per_page)) + 1), config.config_books_per_page,
-                            len(entries) + 1)
+    elements.extend(
+        {'id': entry.id, 'name': entry.id}
+        for entry in entries[
+            off
+            + shift
+            - 1 : int(off + int(config.config_books_per_page) - shift)
+        ]
+    )
+
+    pagination = Pagination(
+        off / (int(config.config_books_per_page)) + 1,
+        config.config_books_per_page,
+        len(entries) + 1,
+    )
+
     return render_xml_template('feed.xml',
                                letterelements=elements,
                                folder='opds.feed_letter_series',
@@ -380,9 +415,11 @@ def feed_ratingindex():
 
     pagination = Pagination((int(off) / (int(config.config_books_per_page)) + 1), config.config_books_per_page,
                             len(entries))
-    element = list()
-    for entry in entries:
-        element.append(FeedObject(entry[0].id, _("{} Stars").format(entry.name)))
+    element = [
+        FeedObject(entry[0].id, _("{} Stars").format(entry.name))
+        for entry in entries
+    ]
+
     return render_xml_template('feed.xml', listelements=element, folder='opds.feed_ratings', pagination=pagination)
 
 
@@ -408,9 +445,7 @@ def feed_formatindex():
     pagination = Pagination((int(off) / (int(config.config_books_per_page)) + 1), config.config_books_per_page,
                             len(entries))
 
-    element = list()
-    for entry in entries:
-        element.append(FeedObject(entry.format, entry.format))
+    element = [FeedObject(entry.format, entry.format) for entry in entries]
     return render_xml_template('feed.xml', listelements=element, folder='opds.feed_format', pagination=pagination)
 
 
@@ -482,7 +517,7 @@ def feed_shelf(book_id):
                                                            ub.Shelf.id == book_id),
                                                       and_(ub.Shelf.is_public == 1,
                                                            ub.Shelf.id == book_id))).first()
-    result = list()
+    result = []
     # user is allowed to access shelf
     if shelf:
         books_in_shelf = ub.session.query(ub.BookShelf).filter(ub.BookShelf.shelf == book_id).order_by(
@@ -504,10 +539,7 @@ def opds_download_link(book_id, book_format):
     user = load_user_from_request(request) or current_user
     if not user.role_download():
         return abort(403)
-    if "Kobo" in request.headers.get('User-Agent'):
-        client = "kobo"
-    else:
-        client = ""
+    client = "kobo" if "Kobo" in request.headers.get('User-Agent') else ""
     return get_download_link(book_id, book_format.lower(), client)
 
 
@@ -515,24 +547,27 @@ def opds_download_link(book_id, book_format):
 @opds.route("/ajax/book/<string:uuid>", defaults={'library': ""})
 @requires_basic_auth_if_no_ano
 def get_metadata_calibre_companion(uuid, library):
-    entry = calibre_db.session.query(db.Books).filter(db.Books.uuid.like("%" + uuid + "%")).first()
-    if entry is not None:
-        js = render_template('json.txt', entry=entry)
-        response = make_response(js)
-        response.headers["Content-Type"] = "application/json; charset=utf-8"
-        return response
-    else:
+    entry = (
+        calibre_db.session.query(db.Books)
+        .filter(db.Books.uuid.like(f"%{uuid}%"))
+        .first()
+    )
+
+    if entry is None:
         return ""
+    js = render_template('json.txt', entry=entry)
+    response = make_response(js)
+    response.headers["Content-Type"] = "application/json; charset=utf-8"
+    return response
 
 
 def feed_search(term):
-    if term:
-        entries, __, ___ = calibre_db.get_search_results(term)
-        entriescount = len(entries) if len(entries) > 0 else 1
-        pagination = Pagination(1, entriescount, entriescount)
-        return render_xml_template('feed.xml', searchterm=term, entries=entries, pagination=pagination)
-    else:
+    if not term:
         return render_xml_template('feed.xml', searchterm="")
+    entries, __, ___ = calibre_db.get_search_results(term)
+    entriescount = len(entries) if len(entries) > 0 else 1
+    pagination = Pagination(1, entriescount, entriescount)
+    return render_xml_template('feed.xml', searchterm=term, entries=entries, pagination=pagination)
 
 
 def check_auth(username, password):
@@ -545,10 +580,9 @@ def check_auth(username, password):
                                             username.decode('utf-8').lower()).first()
     if bool(user and check_password_hash(str(user.password), password)):
         return True
-    else:
-        ip_Address = request.headers.get('X-Forwarded-For', request.remote_addr)
-        log.warning('OPDS Login failed for user "%s" IP-address: %s', username.decode('utf-8'), ip_Address)
-        return False
+    ip_Address = request.headers.get('X-Forwarded-For', request.remote_addr)
+    log.warning('OPDS Login failed for user "%s" IP-address: %s', username.decode('utf-8'), ip_Address)
+    return False
 
 
 def authenticate():

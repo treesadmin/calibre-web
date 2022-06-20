@@ -173,12 +173,12 @@ def migrate():
             currUniqueConstraint = 'UNIQUE (gdrive_id)'
             if currUniqueConstraint in sql[0]:
                 sql=sql[0].replace(currUniqueConstraint, 'UNIQUE (gdrive_id, path)')
-                sql=sql.replace(GdriveId.__tablename__, GdriveId.__tablename__ + '2')
+                sql = sql.replace(GdriveId.__tablename__, f'{GdriveId.__tablename__}2')
                 session.execute(sql)
                 session.execute("INSERT INTO gdrive_ids2 (id, gdrive_id, path) SELECT id, "
                                 "gdrive_id, path FROM gdrive_ids;")
                 session.commit()
-                session.execute('DROP TABLE %s' % 'gdrive_ids')
+                session.execute('DROP TABLE gdrive_ids')
                 session.execute('ALTER TABLE gdrive_ids2 RENAME to gdrive_ids')
             break
 
@@ -222,7 +222,7 @@ def listRootFolders():
         folder = "'root' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         fileList = drive.ListFile({'q': folder}).GetList()
     except (ServerNotFoundError, ssl.SSLError, RefreshError) as e:
-        log.info("GDrive Error %s" % e)
+        log.info(f"GDrive Error {e}")
         fileList = []
     return fileList
 
@@ -239,76 +239,77 @@ def getFolderInFolder(parentId, folderName, drive):
     folder = query + "'%s' in parents and mimeType = 'application/vnd.google-apps.folder'" \
                      " and trashed = false" % parentId
     fileList = drive.ListFile({'q': folder}).GetList()
-    if fileList.__len__() == 0:
-        return None
-    else:
-        return fileList[0]
+    return None if fileList.__len__() == 0 else fileList[0]
 
 # Search for id of root folder in gdrive database, if not found request from gdrive and store in internal database
 def getEbooksFolderId(drive=None):
-    storedPathName = session.query(GdriveId).filter(GdriveId.path == '/').first()
-    if storedPathName:
+    if (
+        storedPathName := session.query(GdriveId)
+        .filter(GdriveId.path == '/')
+        .first()
+    ):
         return storedPathName.gdrive_id
-    else:
-        gDriveId = GdriveId()
-        try:
-            gDriveId.gdrive_id = getEbooksFolder(drive)['id']
-        except Exception:
-            log.error('Error gDrive, root ID not found')
-        gDriveId.path = '/'
-        session.merge(gDriveId)
-        try:
-            session.commit()
-        except OperationalError as ex:
-            log.error("gdrive.db DB is not Writeable")
-            log.debug('Database error: %s', ex)
-            session.rollback()
-        return gDriveId.gdrive_id
+    gDriveId = GdriveId()
+    try:
+        gDriveId.gdrive_id = getEbooksFolder(drive)['id']
+    except Exception:
+        log.error('Error gDrive, root ID not found')
+    gDriveId.path = '/'
+    session.merge(gDriveId)
+    try:
+        session.commit()
+    except OperationalError as ex:
+        log.error("gdrive.db DB is not Writeable")
+        log.debug('Database error: %s', ex)
+        session.rollback()
+    return gDriveId.gdrive_id
 
 
 def getFile(pathId, fileName, drive):
     metaDataFile = "'%s' in parents and trashed = false and title = '%s'" % (pathId, fileName.replace("'", r"\'"))
     fileList = drive.ListFile({'q': metaDataFile}).GetList()
-    if fileList.__len__() == 0:
-        return None
-    else:
-        return fileList[0]
+    return None if fileList.__len__() == 0 else fileList[0]
 
 
 def getFolderId(path, drive):
     # drive = getDrive(drive)
     try:
         currentFolderId = getEbooksFolderId(drive)
-        sqlCheckPath = path if path[-1] == '/' else path + '/'
-        storedPathName = session.query(GdriveId).filter(GdriveId.path == sqlCheckPath).first()
-
-        if not storedPathName:
+        sqlCheckPath = path if path[-1] == '/' else f'{path}/'
+        if (
+            storedPathName := session.query(GdriveId)
+            .filter(GdriveId.path == sqlCheckPath)
+            .first()
+        ):
+            currentFolderId = storedPathName.gdrive_id
+        else:
             dbChange = False
             s = path.split('/')
             for i, x in enumerate(s):
                 if len(x) > 0:
                     currentPath = "/".join(s[:i+1])
                     if currentPath[-1] != '/':
-                        currentPath = currentPath + '/'
-                    storedPathName = session.query(GdriveId).filter(GdriveId.path == currentPath).first()
-                    if storedPathName:
+                        currentPath += '/'
+                    if (
+                        storedPathName := session.query(GdriveId)
+                        .filter(GdriveId.path == currentPath)
+                        .first()
+                    ):
                         currentFolderId = storedPathName.gdrive_id
+                    elif currentFolder := getFolderInFolder(
+                        currentFolderId, x, drive
+                    ):
+                        gDriveId = GdriveId()
+                        gDriveId.gdrive_id = currentFolder['id']
+                        gDriveId.path = currentPath
+                        session.merge(gDriveId)
+                        dbChange = True
+                        currentFolderId = currentFolder['id']
                     else:
-                        currentFolder = getFolderInFolder(currentFolderId, x, drive)
-                        if currentFolder:
-                            gDriveId = GdriveId()
-                            gDriveId.gdrive_id = currentFolder['id']
-                            gDriveId.path = currentPath
-                            session.merge(gDriveId)
-                            dbChange = True
-                            currentFolderId = currentFolder['id']
-                        else:
-                            currentFolderId = None
-                            break
+                        currentFolderId = None
+                        break
             if dbChange:
                 session.commit()
-        else:
-            currentFolderId = storedPathName.gdrive_id
     except OperationalError as ex:
         log.error("gdrive.db DB is not Writeable")
         log.debug('Database error: %s', ex)
@@ -318,15 +319,8 @@ def getFolderId(path, drive):
 
 def getFileFromEbooksFolder(path, fileName):
     drive = getDrive(Gdrive.Instance().drive)
-    if path:
-        # sqlCheckPath=path if path[-1] =='/' else path + '/'
-        folderId = getFolderId(path, drive)
-    else:
-        folderId = getEbooksFolderId(drive)
-    if folderId:
-        return getFile(folderId, fileName, drive)
-    else:
-        return None
+    folderId = getFolderId(path, drive) if path else getEbooksFolderId(drive)
+    return getFile(folderId, fileName, drive) if folderId else None
 
 
 def moveGdriveFileRemote(origin_file_id, new_title):
@@ -378,23 +372,29 @@ def copyToDrive(drive, uploadFile, createRoot, replaceFiles,
                                        'parents': [{"kind": "drive#fileLink", 'id': parent['id']}],
                 "mimeType": "application/vnd.google-apps.folder"})
             parent.Upload()
-        else:
-            if (not isInitial or createRoot) and len(existingFolder) > 0:
-                parent = existingFolder[0]
+        elif (not isInitial or createRoot) and len(existingFolder) > 0:
+            parent = existingFolder[0]
         for f in os.listdir(os.path.join(prevDir, uploadFile)):
             if f not in ignoreFiles:
                 copyToDrive(drive, f, True, replaceFiles, ignoreFiles, parent, os.path.join(prevDir, uploadFile))
-    else:
-        if os.path.basename(uploadFile) not in ignoreFiles:
-            existingFiles = drive.ListFile({'q': "title = '%s' and '%s' in parents and trashed = false" %
-                                                 (os.path.basename(uploadFile).replace("'", r"\'"), parent['id'])}).GetList()
-            if len(existingFiles) > 0:
-                driveFile = existingFiles[0]
-            else:
-                driveFile = drive.CreateFile({'title': os.path.basename(uploadFile).replace("'", r"\'"),
-                                              'parents': [{"kind":"drive#fileLink", 'id': parent['id']}], })
-            driveFile.SetContentFile(os.path.join(prevDir, uploadFile))
-            driveFile.Upload()
+    elif os.path.basename(uploadFile) not in ignoreFiles:
+        existingFiles = drive.ListFile({'q': "title = '%s' and '%s' in parents and trashed = false" %
+                                             (os.path.basename(uploadFile).replace("'", r"\'"), parent['id'])}).GetList()
+        driveFile = (
+            existingFiles[0]
+            if len(existingFiles) > 0
+            else drive.CreateFile(
+                {
+                    'title': os.path.basename(uploadFile).replace("'", r"\'"),
+                    'parents': [
+                        {"kind": "drive#fileLink", 'id': parent['id']}
+                    ],
+                }
+            )
+        )
+
+        driveFile.SetContentFile(os.path.join(prevDir, uploadFile))
+        driveFile.Upload()
 
 
 def uploadFileToEbooksFolder(destFile, f):
@@ -495,15 +495,14 @@ def stopChannel(drive, channel_id, resource_id):
     return drive.auth.service.channels().stop(body=body).execute()
 
 
-def getChangeById (drive, change_id):
+def getChangeById(drive, change_id):
     # Print a single Change resource information.
     #
     # Args:
     # service: Drive API service instance.
     # change_id: ID of the Change resource to retrieve.
     try:
-        change = drive.auth.service.changes().get(changeId=change_id).execute()
-        return change
+        return drive.auth.service.changes().get(changeId=change_id).execute()
     except (errors.HttpError) as error:
         log.error(error)
         return None
@@ -531,9 +530,12 @@ def updateGdriveCalibreFromLocal():
 
 # update gdrive.db on edit of books title
 def updateDatabaseOnEdit(ID,newPath):
-    sqlCheckPath = newPath if newPath[-1] == '/' else newPath + u'/'
-    storedPathName = session.query(GdriveId).filter(GdriveId.gdrive_id == ID).first()
-    if storedPathName:
+    sqlCheckPath = newPath if newPath[-1] == '/' else f'{newPath}/'
+    if (
+        storedPathName := session.query(GdriveId)
+        .filter(GdriveId.gdrive_id == ID)
+        .first()
+    ):
         storedPathName.path = sqlCheckPath
         try:
             session.commit()
@@ -556,27 +558,25 @@ def deleteDatabaseEntry(ID):
 
 # Gets cover file from gdrive
 def get_cover_via_gdrive(cover_path):
-    df = getFileFromEbooksFolder(cover_path, 'cover.jpg')
-    if df:
-        if not session.query(PermissionAdded).filter(PermissionAdded.gdrive_id == df['id']).first():
-            df.GetPermissions()
-            df.InsertPermission({
-                            'type': 'anyone',
-                            'value': 'anyone',
-                            'role': 'reader',
-                            'withLink': True})
-            permissionAdded = PermissionAdded()
-            permissionAdded.gdrive_id = df['id']
-            session.add(permissionAdded)
-            try:
-                session.commit()
-            except OperationalError as ex:
-                log.error("gdrive.db DB is not Writeable")
-                log.debug('Database error: %s', ex)
-                session.rollback()
-        return df.metadata.get('webContentLink')
-    else:
+    if not (df := getFileFromEbooksFolder(cover_path, 'cover.jpg')):
         return None
+    if not session.query(PermissionAdded).filter(PermissionAdded.gdrive_id == df['id']).first():
+        df.GetPermissions()
+        df.InsertPermission({
+                        'type': 'anyone',
+                        'value': 'anyone',
+                        'role': 'reader',
+                        'withLink': True})
+        permissionAdded = PermissionAdded()
+        permissionAdded.gdrive_id = df['id']
+        session.add(permissionAdded)
+        try:
+            session.commit()
+        except OperationalError as ex:
+            log.error("gdrive.db DB is not Writeable")
+            log.debug('Database error: %s', ex)
+            session.rollback()
+    return df.metadata.get('webContentLink')
 
 # Creates chunks for downloading big files
 def partial(total_byte_len, part_size_limit):
@@ -594,7 +594,7 @@ def do_gdrive_download(df, headers, convert_encoding=False):
 
     def stream(convert_encoding):
         for byte in s:
-            headers = {"Range": 'bytes=%s-%s' % (byte[0], byte[1])}
+            headers = {"Range": f'bytes={byte[0]}-{byte[1]}'}
             resp, content = df.auth.Get_Http_Object().request(download_url, headers=headers)
             if resp.status == 206:
                 if convert_encoding:

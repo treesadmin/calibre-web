@@ -144,7 +144,10 @@ def bookmark(book_id, book_format):
                             format=book_format,
                             bookmark_key=bookmark_key)
     ub.session.merge(lbookmark)
-    ub.session_commit("Bookmark for user {} in book {} created".format(current_user.id, book_id))
+    ub.session_commit(
+        f"Bookmark for user {current_user.id} in book {book_id} created"
+    )
+
     return "", 201
 
 
@@ -169,27 +172,30 @@ def toggle_read(book_id):
             kobo_reading_state.statistics = ub.KoboStatistics()
             book.kobo_reading_state = kobo_reading_state
         ub.session.merge(book)
-        ub.session_commit("Book {} readbit toggled".format(book_id))
+        ub.session_commit(f"Book {book_id} readbit toggled")
     else:
         try:
             calibre_db.update_title_sort(config)
             book = calibre_db.get_filtered_book(book_id)
-            read_status = getattr(book, 'custom_column_' + str(config.config_read_column))
+            read_status = getattr(book, f'custom_column_{str(config.config_read_column)}')
             if len(read_status):
                 read_status[0].value = not read_status[0].value
-                calibre_db.session.commit()
             else:
                 cc_class = db.cc_classes[config.config_read_column]
                 new_cc = cc_class(value=1, book=book_id)
                 calibre_db.session.add(new_cc)
-                calibre_db.session.commit()
+            calibre_db.session.commit()
         except (KeyError, AttributeError):
             log.error(u"Custom Column No.%d is not existing in calibre database", config.config_read_column)
-            return "Custom Column No.{} is not existing in calibre database".format(config.config_read_column), 400
+            return (
+                f"Custom Column No.{config.config_read_column} is not existing in calibre database",
+                400,
+            )
+
         except (OperationalError, InvalidRequestError) as e:
             calibre_db.session.rollback()
             log.error(u"Read status could not set: %e", e)
-            return "Read status could not set: {}".format(e), 400
+            return f"Read status could not set: {e}", 400
     return ""
 
 @web.route("/ajax/togglearchived/<int:book_id>", methods=['POST'])
@@ -204,7 +210,7 @@ def toggle_archived(book_id):
         archived_book = ub.ArchivedBook(user_id=current_user.id, book_id=book_id)
         archived_book.is_archived = True
     ub.session.merge(archived_book)
-    ub.session_commit("Book {} archivebit toggled".format(book_id))
+    ub.session_commit(f"Book {book_id} archivebit toggled")
     return ""
 
 
@@ -309,10 +315,9 @@ def get_languages_json():
     entries_start = [s for key, s in language_names.items() if s.lower().startswith(query.lower())]
     if len(entries_start) < 5:
         entries = [s for key, s in language_names.items() if query in s.lower()]
-        entries_start.extend(entries[0:(5 - len(entries_start))])
+        entries_start.extend(entries[:5 - len(entries_start)])
         entries_start = list(set(entries_start))
-    json_dumps = json.dumps([dict(name=r) for r in entries_start[0:5]])
-    return json_dumps
+    return json.dumps([dict(name=r) for r in entries_start[:5]])
 
 
 @web.route("/get_matching_tags", methods=['GET'])
@@ -325,8 +330,13 @@ def get_matching_tags():
     title_input = request.args.get('book_title') or ''
     include_tag_inputs = request.args.getlist('include_tag') or ''
     exclude_tag_inputs = request.args.getlist('exclude_tag') or ''
-    q = q.filter(db.Books.authors.any(func.lower(db.Authors.name).ilike("%" + author_input + "%")),
-                 func.lower(db.Books.title).ilike("%" + title_input + "%"))
+    q = q.filter(
+        db.Books.authors.any(
+            func.lower(db.Authors.name).ilike(f"%{author_input}%")
+        ),
+        func.lower(db.Books.title).ilike(f"%{title_input}%"),
+    )
+
     if len(include_tag_inputs) > 0:
         for tag in include_tag_inputs:
             q = q.filter(db.Books.tags.any(db.Tags.id == tag))
@@ -337,8 +347,7 @@ def get_matching_tags():
         for tag in book.tags:
             if tag.id not in tag_dict['tags']:
                 tag_dict['tags'].append(tag.id)
-    json_dumps = json.dumps(tag_dict)
-    return json_dumps
+    return json.dumps(tag_dict)
 
 
 def get_sort_function(sort, data):
@@ -447,11 +456,14 @@ def render_hot_books(page):
         all_books = ub.session.query(ub.Downloads, func.count(ub.Downloads.book_id)).order_by(
             func.count(ub.Downloads.book_id).desc()).group_by(ub.Downloads.book_id)
         hot_books = all_books.offset(off).limit(config.config_books_per_page)
-        entries = list()
+        entries = []
         for book in hot_books:
-            downloadBook = calibre_db.session.query(db.Books).filter(calibre_db.common_filters()).filter(
-                db.Books.id == book.Downloads.book_id).first()
-            if downloadBook:
+            if (
+                downloadBook := calibre_db.session.query(db.Books)
+                .filter(calibre_db.common_filters())
+                .filter(db.Books.id == book.Downloads.book_id)
+                .first()
+            ):
                 entries.append(downloadBook)
             else:
                 ub.delete_download(book.Downloads.book_id)
@@ -464,10 +476,7 @@ def render_hot_books(page):
 
 
 def render_downloaded_books(page, order, user_id):
-    if current_user.role_admin():
-        user_id = int(user_id)
-    else:
-        user_id = current_user.id
+    user_id = int(user_id) if current_user.role_admin() else current_user.id
     if current_user.check_visibility(constants.SIDEBAR_DOWNLOAD):
         if current_user.show_detail_random():
             random = calibre_db.session.query(db.Books).filter(calibre_db.common_filters()) \
@@ -525,8 +534,11 @@ def render_author_books(page, author_id, order):
 
 
 def render_publisher_books(page, book_id, order):
-    publisher = calibre_db.session.query(db.Publishers).filter(db.Publishers.id == book_id).first()
-    if publisher:
+    if (
+        publisher := calibre_db.session.query(db.Publishers)
+        .filter(db.Publishers.id == book_id)
+        .first()
+    ):
         entries, random, pagination = calibre_db.fill_indexpage(page, 0,
                                                                 db.Books,
                                                                 db.Books.publishers.any(db.Publishers.id == book_id),
@@ -541,8 +553,11 @@ def render_publisher_books(page, book_id, order):
 
 
 def render_series_books(page, book_id, order):
-    name = calibre_db.session.query(db.Series).filter(db.Series.id == book_id).first()
-    if name:
+    if (
+        name := calibre_db.session.query(db.Series)
+        .filter(db.Series.id == book_id)
+        .first()
+    ):
         entries, random, pagination = calibre_db.fill_indexpage(page, 0,
                                                                 db.Books,
                                                                 db.Books.series.any(db.Series.id == book_id),
@@ -567,8 +582,11 @@ def render_ratings_books(page, book_id, order):
 
 
 def render_formats_books(page, book_id, order):
-    name = calibre_db.session.query(db.Data).filter(db.Data.format == book_id.upper()).first()
-    if name:
+    if (
+        name := calibre_db.session.query(db.Data)
+        .filter(db.Data.format == book_id.upper())
+        .first()
+    ):
         entries, random, pagination = calibre_db.fill_indexpage(page, 0,
                                                                 db.Books,
                                                                 db.Books.data.any(db.Data.format == book_id.upper()),
@@ -580,8 +598,11 @@ def render_formats_books(page, book_id, order):
 
 
 def render_category_books(page, book_id, order):
-    name = calibre_db.session.query(db.Tags).filter(db.Tags.id == book_id).first()
-    if name:
+    if (
+        name := calibre_db.session.query(db.Tags)
+        .filter(db.Tags.id == book_id)
+        .first()
+    ):
         entries, random, pagination = calibre_db.fill_indexpage(page, 0,
                                                                 db.Books,
                                                                 db.Books.tags.any(db.Tags.id == book_id),
@@ -646,15 +667,14 @@ def render_read_books(page, are_read, as_xml=False, order=None):
             # ToDo: Handle error Case for opds
     if as_xml:
         return entries, pagination
+    if are_read:
+        name = _(u'Read Books') + ' (' + str(pagination.total_count) + ')'
+        pagename = "read"
     else:
-        if are_read:
-            name = _(u'Read Books') + ' (' + str(pagination.total_count) + ')'
-            pagename = "read"
-        else:
-            name = _(u'Unread Books') + ' (' + str(pagination.total_count) + ')'
-            pagename = "unread"
-        return render_title_template('index.html', random=random, entries=entries, pagination=pagination,
-                                     title=name, page=pagename)
+        name = _(u'Unread Books') + ' (' + str(pagination.total_count) + ')'
+        pagename = "unread"
+    return render_title_template('index.html', random=random, entries=entries, pagination=pagination,
+                                 title=name, page=pagename)
 
 
 def render_archived_books(page, order):

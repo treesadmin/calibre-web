@@ -52,18 +52,13 @@ def load_user(user_id):
 @lm.request_loader
 def load_user_from_request(request):
     if config.config_allow_reverse_proxy_header_login:
-        rp_header_name = config.config_reverse_proxy_login_header_name
-        if rp_header_name:
-            rp_header_username = request.headers.get(rp_header_name)
-            if rp_header_username:
-                user = _fetch_user_by_name(rp_header_username)
-                if user:
+        if rp_header_name := config.config_reverse_proxy_login_header_name:
+            if rp_header_username := request.headers.get(rp_header_name):
+                if user := _fetch_user_by_name(rp_header_username):
                     return user
 
-    auth_header = request.headers.get("Authorization")
-    if auth_header:
-        user = load_user_from_auth_header(auth_header)
-        if user:
+    if auth_header := request.headers.get("Authorization"):
+        if user := load_user_from_auth_header(auth_header):
             return user
 
     return
@@ -81,9 +76,13 @@ def load_user_from_auth_header(header_val):
     except (TypeError, UnicodeDecodeError, binascii.Error):
         pass
     user = _fetch_user_by_name(basic_username)
-    if user and config.config_login_type == constants.LOGIN_LDAP and services.ldap:
-        if services.ldap.bind_user(str(user.password), basic_password):
-            return user
+    if (
+        user
+        and config.config_login_type == constants.LOGIN_LDAP
+        and services.ldap
+        and services.ldap.bind_user(str(user.password), basic_password)
+    ):
+        return user
     if user and check_password_hash(str(user.password), basic_password):
         return user
     return

@@ -36,23 +36,12 @@ def get_fb2_info(tmp_file_path, original_file_extension):
 
     def get_author(element):
         last_name = element.xpath('fb:last-name/text()', namespaces=ns)
-        if len(last_name):
-            last_name = last_name[0]
-        else:
-            last_name = u''
+        last_name = last_name[0] if len(last_name) else u''
         middle_name = element.xpath('fb:middle-name/text()', namespaces=ns)
-        if len(middle_name):
-            middle_name = middle_name[0]
-        else:
-            middle_name = u''
+        middle_name = middle_name[0] if len(middle_name) else u''
         first_name = element.xpath('fb:first-name/text()', namespaces=ns)
-        if len(first_name):
-            first_name = first_name[0]
-        else:
-            first_name = u''
-        return (first_name + u' '
-                + middle_name + u' '
-                + last_name)
+        first_name = first_name[0] if len(first_name) else u''
+        return (((f'{first_name} ' + middle_name) + u' ') + last_name)
 
     author = str(", ".join(map(get_author, authors)))
 

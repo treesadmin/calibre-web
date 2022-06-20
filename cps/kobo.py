@@ -71,7 +71,7 @@ def get_store_url_for_current_request():
     __, __, request_path = request_path_with_auth_token.rstrip("?").partition(
         "/"
     )
-    return KOBO_STOREAPI_URL + "/" + request_path
+    return f"{KOBO_STOREAPI_URL}/{request_path}"
 
 
 CONNECTION_SPECIFIC_HEADERS = [
@@ -92,41 +92,38 @@ def make_request_to_kobo_store(sync_token=None):
     if sync_token:
         sync_token.set_kobo_store_header(outgoing_headers)
 
-    store_response = requests.request(
+    return requests.request(
         method=request.method,
         url=get_store_url_for_current_request(),
         headers=outgoing_headers,
         data=request.get_data(),
         allow_redirects=False,
-        timeout=(2, 10)
+        timeout=(2, 10),
     )
-    return store_response
 
 
 def redirect_or_proxy_request():
-    if config.config_kobo_proxy:
-        if request.method == "GET":
-            return redirect(get_store_url_for_current_request(), 307)
-        else:
-            # The Kobo device turns other request types into GET requests on redirects, so we instead proxy to the Kobo store ourselves.
-            store_response = make_request_to_kobo_store()
-
-            response_headers = store_response.headers
-            for header_key in CONNECTION_SPECIFIC_HEADERS:
-                response_headers.pop(header_key, default=None)
-
-            return make_response(
-                store_response.content, store_response.status_code, response_headers.items()
-            )
-    else:
+    if not config.config_kobo_proxy:
         return make_response(jsonify({}))
+    if request.method == "GET":
+        return redirect(get_store_url_for_current_request(), 307)
+    # The Kobo device turns other request types into GET requests on redirects, so we instead proxy to the Kobo store ourselves.
+    store_response = make_request_to_kobo_store()
+
+    response_headers = store_response.headers
+    for header_key in CONNECTION_SPECIFIC_HEADERS:
+        response_headers.pop(header_key, default=None)
+
+    return make_response(
+        store_response.content, store_response.status_code, response_headers.items()
+    )
 
 
 def convert_to_kobo_timestamp_string(timestamp):
     try:
         return timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
     except AttributeError as exc:
-        log.debug("Timestamp not valid: {}".format(exc))
+        log.debug(f"Timestamp not valid: {exc}")
         return datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 

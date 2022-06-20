@@ -81,22 +81,31 @@ def convert_book_format(book_id, calibrepath, old_book_format, new_book_format, 
         log.error("convert_book_format: %s", error_message)
         return error_message
     if config.config_use_google_drive:
-        if not gd.getFileFromEbooksFolder(book.path, data.name + "." + old_book_format.lower()):
-            error_message = _(u"%(format)s not found on Google Drive: %(fn)s",
-                              format=old_book_format, fn=data.name + "." + old_book_format.lower())
+        if not gd.getFileFromEbooksFolder(
+            book.path, f"{data.name}.{old_book_format.lower()}"
+        ):
+            error_message = _(
+                u"%(format)s not found on Google Drive: %(fn)s",
+                format=old_book_format,
+                fn=f"{data.name}.{old_book_format.lower()}",
+            )
+
             return error_message
-    else:
-        if not os.path.exists(file_path + "." + old_book_format.lower()):
-            error_message = _(u"%(format)s not found: %(fn)s",
-                              format=old_book_format, fn=data.name + "." + old_book_format.lower())
-            return error_message
+    elif not os.path.exists(f"{file_path}.{old_book_format.lower()}"):
+        error_message = _(
+            u"%(format)s not found: %(fn)s",
+            format=old_book_format,
+            fn=f"{data.name}.{old_book_format.lower()}",
+        )
+
+        return error_message
     # read settings and append converter task to queue
     if kindle_mail:
         settings = config.get_mail_settings()
         settings['subject'] = _('Send to Kindle')  # pretranslate Subject for e-mail
         settings['body'] = _(u'This e-mail has been sent via Calibre-Web.')
     else:
-        settings = dict()
+        settings = {}
     txt = (u"%s -> %s: %s" % (
            old_book_format,
            new_book_format,
@@ -138,14 +147,14 @@ def send_registration_mail(e_mail, user_name, default_password, resend=False):
 
 
 def check_send_to_kindle_with_converter(formats):
-    bookformats = list()
+    bookformats = []
     if 'EPUB' in formats and 'MOBI' not in formats:
         bookformats.append({'format': 'Mobi',
                             'convert': 1,
                             'text': _('Convert %(orig)s to %(format)s and send to Kindle',
                                       orig='Epub',
                                       format='Mobi')})
-    if 'AZW3' in formats and not 'MOBI' in formats:
+    if 'AZW3' in formats and 'MOBI' not in formats:
         bookformats.append({'format': 'Mobi',
                             'convert': 2,
                             'text': _('Convert %(orig)s to %(format)s and send to Kindle',
@@ -158,12 +167,14 @@ def check_send_to_kindle(entry):
     """
         returns all available book formats for sending to Kindle
     """
-    formats = list()
-    bookformats = list()
     if len(entry.data):
-        for ele in iter(entry.data):
-            if ele.uncompressed_size < config.mail_size:
-                formats.append(ele.format)
+        formats = [
+            ele.format
+            for ele in iter(entry.data)
+            if ele.uncompressed_size < config.mail_size
+        ]
+
+        bookformats = []
         if 'MOBI' in formats:
             bookformats.append({'format': 'Mobi',
                                 'convert': 0,
@@ -187,12 +198,15 @@ def check_send_to_kindle(entry):
 # Check if a reader is existing for any of the book formats, if not, return empty list, otherwise return
 # list with supported formats
 def check_read_formats(entry):
-    EXTENSIONS_READER = {'TXT', 'PDF', 'EPUB', 'CBZ', 'CBT', 'CBR', 'DJVU'}
-    bookformats = list()
+    bookformats = []
     if len(entry.data):
-        for ele in iter(entry.data):
-            if ele.format.upper() in EXTENSIONS_READER:
-                bookformats.append(ele.format.lower())
+        EXTENSIONS_READER = {'TXT', 'PDF', 'EPUB', 'CBZ', 'CBT', 'CBR', 'DJVU'}
+        bookformats.extend(
+            ele.format.lower()
+            for ele in iter(entry.data)
+            if ele.format.upper() in EXTENSIONS_READER
+        )
+
     return bookformats
 
 
@@ -213,7 +227,7 @@ def send_mail(book_id, book_format, convert, kindle_mail, calibrepath, user_id):
 
     for entry in iter(book.data):
         if entry.format.upper() == book_format.upper():
-            converted_file_name = entry.name + '.' + book_format.lower()
+            converted_file_name = f'{entry.name}.{book_format.lower()}'
             WorkerThread.add(user_id, TaskEmail(_(u"Send to Kindle"), book.path, converted_file_name,
                              config.get_mail_settings(), kindle_mail,
                              _(u"E-mail: %(book)s", book=book.title), _(u'This e-mail has been sent via Calibre-Web.')))
@@ -227,7 +241,7 @@ def get_valid_filename(value, replace_whitespace=True):
     filename. Limits num characters to 128 max.
     """
     if value[-1:] == u'.':
-        value = value[:-1]+u'_'
+        value = f'{value[:-1]}_'
     value = value.replace("/", "_").replace(":", "_").strip('\0')
     if use_unidecode:
         value = (unidecode.unidecode(value))
@@ -248,10 +262,7 @@ def get_valid_filename(value, replace_whitespace=True):
     value = value[:128].strip()
     if not value:
         raise ValueError("Filename cannot be empty")
-    if sys.version_info.major == 3:
-        return value
-    else:
-        return value.decode('utf-8')
+    return value if sys.version_info.major == 3 else value.decode('utf-8')
 
 
 def split_authors(values):
@@ -262,7 +273,7 @@ def split_authors(values):
             commas = author.count(',')
             if commas == 1:
                 author_split = author.split(',')
-                authors_list.append(author_split[1].strip() + ' ' + author_split[0].strip())
+                authors_list.append(f'{author_split[1].strip()} {author_split[0].strip()}')
             elif commas > 1:
                 authors_list.extend([x.strip() for x in author.split(',')])
             else:
@@ -278,73 +289,69 @@ def get_sorted_author(value):
             value = value.split(" ")
             if re.match(combined, value[-1].upper()):
                 if len(value) > 1:
-                    value2 = value[-2] + ", " + " ".join(value[:-2]) + " " + value[-1]
+                    value2 = f"{value[-2]}, " + " ".join(value[:-2]) + " " + value[-1]
                 else:
                     value2 = value[0]
             elif len(value) == 1:
                 value2 = value[0]
             else:
-                value2 = value[-1] + ", " + " ".join(value[:-1])
+                value2 = f"{value[-1]}, " + " ".join(value[:-1])
         else:
             value2 = value
     except Exception as ex:
         log.error("Sorting author %s failed: %s", value, ex)
-        if isinstance(list, value2):
-            value2 = value[0]
-        else:
-            value2 = value
+        value2 = value[0] if isinstance(list, value2) else value
     return value2
 
 
 # Deletes a book fro the local filestorage, returns True if deleting is successfull, otherwise false
 def delete_book_file(book, calibrepath, book_format=None):
     # check that path is 2 elements deep, check that target path has no subfolders
-    if book.path.count('/') == 1:
-        path = os.path.join(calibrepath, book.path)
-        if book_format:
-            for file in os.listdir(path):
-                if file.upper().endswith("."+book_format):
-                    os.remove(os.path.join(path, file))
+    if book.path.count('/') != 1:
+        return
+    path = os.path.join(calibrepath, book.path)
+    if book_format:
+        for file in os.listdir(path):
+            if file.upper().endswith(f".{book_format}"):
+                os.remove(os.path.join(path, file))
+        return True, None
+    else:
+        if os.path.isdir(path):
+            try:
+                for root, folders, files in os.walk(path):
+                    for f in files:
+                        os.unlink(os.path.join(root, f))
+                    if len(folders):
+                        log.warning(
+                            f"Deleting book {book.id} failed, path {book.path} has subfolders: {folders}"
+                        )
+
+                        return True, _("Deleting bookfolder for book %(id)s failed, path has subfolders: %(path)s",
+                                       id=book.id,
+                                       path=book.path)
+                shutil.rmtree(path)
+            except (IOError, OSError) as e:
+                log.error("Deleting book %s failed: %s", book.id, e)
+                return False, _("Deleting book %(id)s failed: %(message)s", id=book.id, message=e)
+            authorpath = os.path.join(calibrepath, os.path.split(book.path)[0])
+            if not os.listdir(authorpath):
+                try:
+                    shutil.rmtree(authorpath)
+                except (IOError, OSError) as e:
+                    log.error("Deleting authorpath for book %s failed: %s", book.id, e)
             return True, None
         else:
-            if os.path.isdir(path):
-                try:
-                    for root, folders, files in os.walk(path):
-                        for f in files:
-                            os.unlink(os.path.join(root, f))
-                        if len(folders):
-                            log.warning("Deleting book {} failed, path {} has subfolders: {}".format(book.id,
-                                        book.path, folders))
-                            return True, _("Deleting bookfolder for book %(id)s failed, path has subfolders: %(path)s",
-                                           id=book.id,
-                                           path=book.path)
-                    shutil.rmtree(path)
-                except (IOError, OSError) as e:
-                    log.error("Deleting book %s failed: %s", book.id, e)
-                    return False, _("Deleting book %(id)s failed: %(message)s", id=book.id, message=e)
-                authorpath = os.path.join(calibrepath, os.path.split(book.path)[0])
-                if not os.listdir(authorpath):
-                    try:
-                        shutil.rmtree(authorpath)
-                    except (IOError, OSError) as e:
-                        log.error("Deleting authorpath for book %s failed: %s", book.id, e)
-                return True, None
-            else:
-                log.error("Deleting book %s failed, book path not valid: %s", book.id, book.path)
-                return True, _("Deleting book %(id)s, book path not valid: %(path)s",
-                               id=book.id,
-                               path=book.path)
+            log.error("Deleting book %s failed, book path not valid: %s", book.id, book.path)
+            return True, _("Deleting book %(id)s, book path not valid: %(path)s",
+                           id=book.id,
+                           path=book.path)
 
 
 # Moves files in file storage during author/title rename, or from temp dir to file storage
 def update_dir_structure_file(book_id, calibrepath, first_author, orignal_filepath, db_filename):
     # get book database entry from id, if original path overwrite source with original_filepath
     localbook = calibre_db.get_book(book_id)
-    if orignal_filepath:
-        path = orignal_filepath
-    else:
-        path = os.path.join(calibrepath, localbook.path)
-
+    path = orignal_filepath or os.path.join(calibrepath, localbook.path)
     # Create (current) authordir and titledir from database
     authordir = localbook.path.split('/')[0]
     titledir = localbook.path.split('/')[1]
@@ -355,11 +362,12 @@ def update_dir_structure_file(book_id, calibrepath, first_author, orignal_filepa
         new_authordir = get_valid_filename(first_author)
     else:
         new_authordir = get_valid_filename(localbook.authors[0].name)
-    new_titledir = get_valid_filename(localbook.title) + " (" + str(book_id) + ")"
+    new_titledir = f"{get_valid_filename(localbook.title)} ({str(book_id)})"
 
     if titledir != new_titledir or authordir != new_authordir or orignal_filepath:
         new_path = os.path.join(calibrepath, new_authordir, new_titledir)
-        new_name = get_valid_filename(localbook.title) + ' - ' + get_valid_filename(new_authordir)
+        new_name = f'{get_valid_filename(localbook.title)} - {get_valid_filename(new_authordir)}'
+
         try:
             if orignal_filepath:
                 if not os.path.isdir(new_path):
@@ -367,19 +375,18 @@ def update_dir_structure_file(book_id, calibrepath, first_author, orignal_filepa
                 shutil.move(os.path.normcase(path), os.path.normcase(os.path.join(new_path, db_filename)))
                 log.debug("Moving title: %s to %s/%s", path, new_path, new_name)
                 # Check new path is not valid path
+            elif os.path.exists(new_path): # path is valid copy only files to new location (merge)
+                log.info("Moving title: %s into existing: %s", path, new_path)
+                # Take all files and subfolder from old path (strange command)
+                for dir_name, __, file_list in os.walk(path):
+                    for file in file_list:
+                        shutil.move(os.path.normcase(os.path.join(dir_name, file)),
+                                        os.path.normcase(os.path.join(new_path + dir_name[len(path):], file)))
+                        # os.unlink(os.path.normcase(os.path.join(dir_name, file)))
             else:
-                if not os.path.exists(new_path):
-                    # move original path to new path
-                    log.debug("Moving title: %s to %s", path, new_path)
-                    shutil.move(os.path.normcase(path), os.path.normcase(new_path))
-                else: # path is valid copy only files to new location (merge)
-                    log.info("Moving title: %s into existing: %s", path, new_path)
-                    # Take all files and subfolder from old path (strange command)
-                    for dir_name, __, file_list in os.walk(path):
-                        for file in file_list:
-                            shutil.move(os.path.normcase(os.path.join(dir_name, file)),
-                                            os.path.normcase(os.path.join(new_path + dir_name[len(path):], file)))
-                            # os.unlink(os.path.normcase(os.path.join(dir_name, file)))
+                # move original path to new path
+                log.debug("Moving title: %s to %s", path, new_path)
+                shutil.move(os.path.normcase(path), os.path.normcase(new_path))
             # change location in database to new author/title path
             localbook.path = os.path.join(new_authordir, new_titledir).replace('\\','/')
         except OSError as ex:
@@ -391,9 +398,21 @@ def update_dir_structure_file(book_id, calibrepath, first_author, orignal_filepa
         # Rename all files from old names to new names
         try:
             for file_format in localbook.data:
-                shutil.move(os.path.normcase(
-                    os.path.join(new_path, file_format.name + '.' + file_format.format.lower())),
-                    os.path.normcase(os.path.join(new_path, new_name + '.' + file_format.format.lower())))
+                shutil.move(
+                    os.path.normcase(
+                        os.path.join(
+                            new_path,
+                            f'{file_format.name}.{file_format.format.lower()}',
+                        )
+                    ),
+                    os.path.normcase(
+                        os.path.join(
+                            new_path,
+                            f'{new_name}.{file_format.format.lower()}',
+                        )
+                    ),
+                )
+
                 file_format.name = new_name
             if not orignal_filepath and len(os.listdir(os.path.dirname(path))) == 0:
                 shutil.rmtree(os.path.dirname(path))
@@ -415,11 +434,12 @@ def update_dir_structure_gdrive(book_id, first_author):
     else:
         new_authordir = get_valid_filename(book.authors[0].name)
     titledir = book.path.split('/')[1]
-    new_titledir = get_valid_filename(book.title) + u" (" + str(book_id) + u")"
+    new_titledir = f"{get_valid_filename(book.title)} ({str(book_id)})"
 
     if titledir != new_titledir:
-        gFile = gd.getFileFromEbooksFolder(os.path.dirname(book.path), titledir)
-        if gFile:
+        if gFile := gd.getFileFromEbooksFolder(
+            os.path.dirname(book.path), titledir
+        ):
             gFile['title'] = new_titledir
             gFile.Upload()
             book.path = book.path.split('/')[0] + u'/' + new_titledir
@@ -429,10 +449,11 @@ def update_dir_structure_gdrive(book_id, first_author):
             error = _(u'File %(file)s not found on Google Drive', file=book.path)  # file not found
 
     if authordir != new_authordir:
-        gFile = gd.getFileFromEbooksFolder(os.path.dirname(book.path), new_titledir)
-        if gFile:
+        if gFile := gd.getFileFromEbooksFolder(
+            os.path.dirname(book.path), new_titledir
+        ):
             gd.moveGdriveFolderRemote(gFile, new_authordir)
-            book.path = new_authordir + u'/' + book.path.split('/')[1]
+            book.path = f'{new_authordir}/' + book.path.split('/')[1]
             path = book.path
             gd.updateDatabaseOnEdit(gFile['id'], book.path)
         else:
@@ -440,13 +461,17 @@ def update_dir_structure_gdrive(book_id, first_author):
     # Rename all files from old names to new names
 
     if authordir != new_authordir or titledir != new_titledir:
-        new_name = get_valid_filename(book.title) + u' - ' + get_valid_filename(new_authordir)
+        new_name = f'{get_valid_filename(book.title)} - {get_valid_filename(new_authordir)}'
+
         for file_format in book.data:
-            gFile = gd.getFileFromEbooksFolder(path, file_format.name + u'.' + file_format.format.lower())
+            gFile = gd.getFileFromEbooksFolder(
+                path, f'{file_format.name}.{file_format.format.lower()}'
+            )
+
             if not gFile:
                 error = _(u'File %(file)s not found on Google Drive', file=file_format.name)  # file not found
                 break
-            gd.moveGdriveFileRemote(gFile, new_name + u'.' + file_format.format.lower())
+            gd.moveGdriveFileRemote(gFile, f'{new_name}.{file_format.format.lower()}')
             file_format.name = new_name
     return error
 
@@ -457,7 +482,7 @@ def delete_book_gdrive(book, book_format):
         name = ''
         for entry in book.data:
             if entry.format.upper() == book_format:
-                name = entry.name + '.' + book_format
+                name = f'{entry.name}.{book_format}'
         gFile = gd.getFileFromEbooksFolder(book.path, name)
     else:
         gFile = gd.getFileFromEbooksFolder(os.path.dirname(book.path), book.path.split('/')[1])
@@ -565,28 +590,25 @@ def get_book_cover_with_uuid(book_uuid,
 
 
 def get_book_cover_internal(book, use_generic_cover_on_failure):
-    if book and book.has_cover:
-        if config.config_use_google_drive:
-            try:
-                if not gd.is_gdrive_ready():
-                    return get_cover_on_failure(use_generic_cover_on_failure)
-                path = gd.get_cover_via_gdrive(book.path)
-                if path:
-                    return redirect(path)
-                else:
-                    log.error('%s/cover.jpg not found on Google Drive', book.path)
-                    return get_cover_on_failure(use_generic_cover_on_failure)
-            except Exception as ex:
-                log.debug_or_exception(ex)
-                return get_cover_on_failure(use_generic_cover_on_failure)
-        else:
-            cover_file_path = os.path.join(config.config_calibre_dir, book.path)
-            if os.path.isfile(os.path.join(cover_file_path, "cover.jpg")):
-                return send_from_directory(cover_file_path, "cover.jpg")
-            else:
-                return get_cover_on_failure(use_generic_cover_on_failure)
-    else:
+    if not book or not book.has_cover:
         return get_cover_on_failure(use_generic_cover_on_failure)
+    if config.config_use_google_drive:
+        try:
+            if not gd.is_gdrive_ready():
+                return get_cover_on_failure(use_generic_cover_on_failure)
+            if path := gd.get_cover_via_gdrive(book.path):
+                return redirect(path)
+            log.error('%s/cover.jpg not found on Google Drive', book.path)
+            return get_cover_on_failure(use_generic_cover_on_failure)
+        except Exception as ex:
+            log.debug_or_exception(ex)
+            return get_cover_on_failure(use_generic_cover_on_failure)
+    else:
+        cover_file_path = os.path.join(config.config_calibre_dir, book.path)
+        if os.path.isfile(os.path.join(cover_file_path, "cover.jpg")):
+            return send_from_directory(cover_file_path, "cover.jpg")
+        else:
+            return get_cover_on_failure(use_generic_cover_on_failure)
 
 
 # saves book cover from url
@@ -618,14 +640,13 @@ def save_cover_from_filestorage(filepath, saved_filename, img):
         if isinstance(img, requests.Response):
             with open(os.path.join(filepath, saved_filename), 'wb') as f:
                 f.write(img.content)
+        elif hasattr(img, "metadata"):
+            # upload of jpg/png... via url
+            img.save(filename=os.path.join(filepath, saved_filename))
+            img.close()
         else:
-            if hasattr(img, "metadata"):
-                # upload of jpg/png... via url
-                img.save(filename=os.path.join(filepath, saved_filename))
-                img.close()
-            else:
-                # upload of jpg/png... from hdd
-                img.save(os.path.join(filepath, saved_filename))
+            # upload of jpg/png... from hdd
+            img.save(os.path.join(filepath, saved_filename))
     except (IOError, OSError):
         log.error(u"Cover-file is not a valid image file, or could not be stored")
         return False, _(u"Cover-file is not a valid image file, or could not be stored")
@@ -642,39 +663,38 @@ def save_cover(img, book_path):
             return False, _("Only jpg/jpeg/png/webp/bmp files are supported as coverfile")
         # convert to jpg because calibre only supports jpg
         if content_type != 'image/jpg':
-            if hasattr(img, 'stream'):
-                imgc = Image(blob=img.stream)
-            else:
-                imgc = Image(blob=io.BytesIO(img.content))
+            imgc = (
+                Image(blob=img.stream)
+                if hasattr(img, 'stream')
+                else Image(blob=io.BytesIO(img.content))
+            )
+
             imgc.format = 'jpeg'
             imgc.transform_colorspace("rgb")
             img = imgc
-    else:
-        if content_type not in 'image/jpeg':
-            log.error("Only jpg/jpeg files are supported as coverfile")
-            return False, _("Only jpg/jpeg files are supported as coverfile")
+    elif content_type not in 'image/jpeg':
+        log.error("Only jpg/jpeg files are supported as coverfile")
+        return False, _("Only jpg/jpeg files are supported as coverfile")
 
-    if config.config_use_google_drive:
-        tmp_dir = os.path.join(gettempdir(), 'calibre_web')
-
-        if not os.path.isdir(tmp_dir):
-            os.mkdir(tmp_dir)
-        ret, message = save_cover_from_filestorage(tmp_dir, "uploaded_cover.jpg", img)
-        if ret is True:
-            gd.uploadFileToEbooksFolder(os.path.join(book_path, 'cover.jpg').replace("\\","/"),
-                                        os.path.join(tmp_dir, "uploaded_cover.jpg"))
-            log.info("Cover is saved on Google Drive")
-            return True, None
-        else:
-            return False, message
-    else:
+    if not config.config_use_google_drive:
         return save_cover_from_filestorage(os.path.join(config.config_calibre_dir, book_path), "cover.jpg", img)
+    tmp_dir = os.path.join(gettempdir(), 'calibre_web')
+
+    if not os.path.isdir(tmp_dir):
+        os.mkdir(tmp_dir)
+    ret, message = save_cover_from_filestorage(tmp_dir, "uploaded_cover.jpg", img)
+    if ret is not True:
+        return False, message
+    gd.uploadFileToEbooksFolder(os.path.join(book_path, 'cover.jpg').replace("\\","/"),
+                                os.path.join(tmp_dir, "uploaded_cover.jpg"))
+    log.info("Cover is saved on Google Drive")
+    return True, None
 
 
 def do_download_file(book, book_format, client, data, headers):
     if config.config_use_google_drive:
         startTime = time.time()
-        df = gd.getFileFromEbooksFolder(book.path, data.name + "." + book_format)
+        df = gd.getFileFromEbooksFolder(book.path, f"{data.name}.{book_format}")
         log.debug('%s', time.time() - startTime)
         if df:
             return gd.do_gdrive_download(df, headers)
@@ -682,18 +702,30 @@ def do_download_file(book, book_format, client, data, headers):
             abort(404)
     else:
         filename = os.path.join(config.config_calibre_dir, book.path)
-        if not os.path.isfile(os.path.join(filename, data.name + "." + book_format)):
+        if not os.path.isfile(
+            os.path.join(filename, f"{data.name}.{book_format}")
+        ):
             # ToDo: improve error handling
-            log.error('File not found: %s', os.path.join(filename, data.name + "." + book_format))
+            log.error(
+                'File not found: %s',
+                os.path.join(filename, f"{data.name}.{book_format}"),
+            )
+
 
         if client == "kobo" and book_format == "kepub":
             headers["Content-Disposition"] = headers["Content-Disposition"].replace(".kepub", ".kepub.epub")
 
-        response = make_response(send_from_directory(filename, data.name + "." + book_format))
+        response = make_response(
+            send_from_directory(filename, f"{data.name}.{book_format}")
+        )
+
         # ToDo Check headers parameter
         for element in headers:
             response.headers[element[0]] = element[1]
-        log.info('Downloading file: {}'.format(os.path.join(filename, data.name + "." + book_format)))
+        log.info(
+            f'Downloading file: {os.path.join(filename, f"{data.name}.{book_format}")}'
+        )
+
         return response
 
 ##################################
@@ -711,9 +743,8 @@ def check_unrar(unrarLocation):
             unrarLocation = unrarLocation.encode(sys.getfilesystemencoding())
         unrarLocation = [unrarLocation]
         for lines in process_wait(unrarLocation):
-            value = re.search('UNRAR (.*) freeware', lines, re.IGNORECASE)
-            if value:
-                version = value.group(1)
+            if value := re.search('UNRAR (.*) freeware', lines, re.IGNORECASE):
+                version = value[1]
                 log.debug("unrar version %s", version)
                 break
     except (OSError, UnicodeDecodeError) as err:
@@ -733,7 +764,7 @@ def json_serial(obj):
             'seconds': obj.seconds,
             'microseconds': obj.microseconds,
         }
-    raise TypeError("Type %s not serializable" % type(obj))
+    raise TypeError(f"Type {type(obj)} not serializable")
 
 
 # helper function for displaying the runtime of tasks
@@ -755,7 +786,7 @@ def format_runtime(runtime):
 
 # helper function to apply localize status information in tasklist entries
 def render_task_status(tasklist):
-    renderedtasklist = list()
+    renderedtasklist = []
     for __, user, __, task in tasklist:
         if user == current_user.name or current_user.role_admin():
             ret = {}
@@ -776,8 +807,8 @@ def render_task_status(tasklist):
                 else:
                     ret['status'] = _(u'Unknown Status')
 
-            ret['taskMessage'] = "{}: {}".format(_(task.name), task.message)
-            ret['progress'] = "{} %".format(int(task.progress * 100))
+            ret['taskMessage'] = f"{_(task.name)}: {task.message}"
+            ret['progress'] = f"{int(task.progress * 100)} %"
             ret['user'] = user
             renderedtasklist.append(ret)
 
@@ -830,7 +861,7 @@ def get_download_link(book_id, book_format, client):
     if book:
         data1 = calibre_db.get_book_format(book.id, book_format.upper())
     else:
-        log.error("Book id {} not found for downloading".format(book_id))
+        log.error(f"Book id {book_id} not found for downloading")
         abort(404)
     if data1:
         # collect downloaded books only for registered user and not for anonymous user
@@ -838,10 +869,13 @@ def get_download_link(book_id, book_format, client):
             ub.update_download(book_id, int(current_user.id))
         file_name = book.title
         if len(book.authors) > 0:
-            file_name = book.authors[0].name + '_' + file_name
+            file_name = f'{book.authors[0].name}_{file_name}'
         file_name = get_valid_filename(file_name)
         headers = Headers()
-        headers["Content-Type"] = mimetypes.types_map.get('.' + book_format, "application/octet-stream")
+        headers["Content-Type"] = mimetypes.types_map.get(
+            f'.{book_format}', "application/octet-stream"
+        )
+
         headers["Content-Disposition"] = "attachment; filename=%s.%s; filename*=UTF-8''%s.%s" % (
             quote(file_name.encode('utf-8')), book_format, quote(file_name.encode('utf-8')), book_format)
         return do_download_file(book, book_format, client, data1, headers)

@@ -49,29 +49,28 @@ class EmailBase:
 
     def send(self, strg):
         """Send `strg' to the server."""
-        log.debug_no_auth('send: {}'.format(strg[:300]))
-        if hasattr(self, 'sock') and self.sock:
-            try:
-                if self.transferSize:
-                    lock=threading.Lock()
-                    lock.acquire()
-                    self.transferSize = len(strg)
-                    lock.release()
-                    for i in range(0, self.transferSize, CHUNKSIZE):
-                        if isinstance(strg, bytes):
-                            self.sock.send((strg[i:i + CHUNKSIZE]))
-                        else:
-                            self.sock.send((strg[i:i + CHUNKSIZE]).encode('utf-8'))
-                        lock.acquire()
-                        self.progress = i
-                        lock.release()
-                else:
-                    self.sock.sendall(strg.encode('utf-8'))
-            except socket.error:
-                self.close()
-                raise smtplib.SMTPServerDisconnected('Server not connected')
-        else:
+        log.debug_no_auth(f'send: {strg[:300]}')
+        if not hasattr(self, 'sock') or not self.sock:
             raise smtplib.SMTPServerDisconnected('please run connect() first')
+        try:
+            if self.transferSize:
+                lock=threading.Lock()
+                lock.acquire()
+                self.transferSize = len(strg)
+                lock.release()
+                for i in range(0, self.transferSize, CHUNKSIZE):
+                    if isinstance(strg, bytes):
+                        self.sock.send((strg[i:i + CHUNKSIZE]))
+                    else:
+                        self.sock.send((strg[i:i + CHUNKSIZE]).encode('utf-8'))
+                    lock.acquire()
+                    self.progress = i
+                    lock.release()
+            else:
+                self.sock.sendall(strg.encode('utf-8'))
+        except socket.error:
+            self.close()
+            raise smtplib.SMTPServerDisconnected('Server not connected')
 
     @classmethod
     def _print_debug(cls, *args):
@@ -112,7 +111,7 @@ class TaskEmail(CalibreTask):
         self.recipent = recipient
         self.text = text
         self.asyncSMTP = None
-        self.results = dict()
+        self.results = {}
 
     def prepare_message(self):
         message = MIMEMultipart()
@@ -125,8 +124,7 @@ class TaskEmail(CalibreTask):
         msg = MIMEText(text.encode('UTF-8'), 'plain', 'UTF-8')
         message.attach(msg)
         if self.attachment:
-            result = self._get_attachment(self.filepath, self.attachment)
-            if result:
+            if result := self._get_attachment(self.filepath, self.attachment):
                 message.attach(result)
             else:
                 self._handleError(u"Attachment not found")
@@ -143,7 +141,7 @@ class TaskEmail(CalibreTask):
                 self.send_gmail_email(msg)
         except MemoryError as e:
             log.debug_or_exception(e)
-            self._handleError(u'MemoryError sending email: {}'.format(str(e)))
+            self._handleError(f'MemoryError sending email: {str(e)}')
         except (smtplib.SMTPException, smtplib.SMTPAuthenticationError) as e:
             log.debug_or_exception(e)
             if hasattr(e, "smtp_error"):
@@ -154,13 +152,13 @@ class TaskEmail(CalibreTask):
                 text = '\n'.join(e.args)
             else:
                 text = ''
-            self._handleError(u'Smtplib Error sending email: {}'.format(text))
+            self._handleError(f'Smtplib Error sending email: {text}')
         except socket.error as e:
             log.debug_or_exception(e)
-            self._handleError(u'Socket Error sending email: {}'.format(e.strerror))
+            self._handleError(f'Socket Error sending email: {e.strerror}')
         except Exception as ex:
             log.debug_or_exception(ex)
-            self._handleError(u'Error sending email: {}'.format(ex))
+            self._handleError(f'Error sending email: {ex}')
 
 
     def send_standard_email(self, msg):
@@ -224,23 +222,19 @@ class TaskEmail(CalibreTask):
         """Get file as MIMEBase message"""
         calibre_path = config.config_calibre_dir
         if config.config_use_google_drive:
-            df = gdriveutils.getFileFromEbooksFolder(bookpath, filename)
-            if df:
-                datafile = os.path.join(calibre_path, bookpath, filename)
-                if not os.path.exists(os.path.join(calibre_path, bookpath)):
-                    os.makedirs(os.path.join(calibre_path, bookpath))
-                df.GetContentFile(datafile)
-            else:
+            if not (df := gdriveutils.getFileFromEbooksFolder(bookpath, filename)):
                 return None
-            file_ = open(datafile, 'rb')
-            data = file_.read()
-            file_.close()
+            datafile = os.path.join(calibre_path, bookpath, filename)
+            if not os.path.exists(os.path.join(calibre_path, bookpath)):
+                os.makedirs(os.path.join(calibre_path, bookpath))
+            df.GetContentFile(datafile)
+            with open(datafile, 'rb') as file_:
+                data = file_.read()
             os.remove(datafile)
         else:
             try:
-                file_ = open(os.path.join(calibre_path, bookpath, filename), 'rb')
-                data = file_.read()
-                file_.close()
+                with open(os.path.join(calibre_path, bookpath, filename), 'rb') as file_:
+                    data = file_.read()
             except IOError as e:
                 log.debug_or_exception(e)
                 log.error(u'The requested file could not be read. Maybe wrong permissions?')
@@ -261,4 +255,4 @@ class TaskEmail(CalibreTask):
         return "Email"
 
     def __str__(self):
-        return "{}, {}".format(self.name, self.subject)
+        return f"{self.name}, {self.subject}"

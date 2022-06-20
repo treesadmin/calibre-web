@@ -110,7 +110,6 @@ def token_verified():
         data['status'] = 'error'
         data['message'] = _(u"Token not found")
 
-    # Token expired
     elif datetime.now() > auth_token.expiration:
         ub.session.delete(auth_token)
         ub.session_commit()
@@ -126,7 +125,7 @@ def token_verified():
         login_user(user)
 
         ub.session.delete(auth_token)
-        ub.session_commit("User {} logged in via remotelogin, token deleted".format(user.name))
+        ub.session_commit(f"User {user.name} logged in via remotelogin, token deleted")
 
         data['status'] = 'success'
         log.debug(u"Remote Login for userid %s succeded", user.id)

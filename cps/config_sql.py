@@ -154,16 +154,16 @@ class _ConfigSQL(object):
         self.load()
 
         change = False
-        if self.config_converterpath == None:  # pylint: disable=access-member-before-definition
+        if self.config_converterpath is None:  # pylint: disable=access-member-before-definition
             change = True
             self.config_converterpath = autodetect_calibre_binary()
 
-        if self.config_kepubifypath == None:  # pylint: disable=access-member-before-definition
+        if self.config_kepubifypath is None:  # pylint: disable=access-member-before-definition
 
             change = True
             self.config_kepubifypath = autodetect_kepubify_binary()
 
-        if self.config_rarfile_location == None:  # pylint: disable=access-member-before-definition
+        if self.config_rarfile_location is None:  # pylint: disable=access-member-before-definition
             change = True
             self.config_rarfile_location = autodetect_unrar_binary()
         if change:
@@ -250,8 +250,10 @@ class _ConfigSQL(object):
         return {k:v for k, v in self.__dict__.items() if k.startswith('mail_')}
 
     def get_mail_server_configured(self):
-        return bool((self.mail_server != constants.DEFAULT_MAIL_SERVER and self.mail_server_type == 0)
-                    or (self.mail_gmail_token != {} and self.mail_server_type == 1))
+        return (
+            self.mail_server != constants.DEFAULT_MAIL_SERVER
+            and self.mail_server_type == 0
+        ) or (self.mail_gmail_token != {} and self.mail_server_type == 1)
 
 
     def set_from_dictionary(self, dictionary, field, convertor=None, default=None, encode=None):
@@ -282,11 +284,13 @@ class _ConfigSQL(object):
         return True
 
     def toDict(self):
-        storage = {}
-        for k, v in self.__dict__.items():
-            if k[0] != '_' and not k.endswith("password") and not k.endswith("secret"):
-                storage[k] = v
-        return storage
+        return {
+            k: v
+            for k, v in self.__dict__.items()
+            if k[0] != '_'
+            and not k.endswith("password")
+            and not k.endswith("secret")
+        }
 
 
     def load(self):
@@ -302,10 +306,9 @@ class _ConfigSQL(object):
                 setattr(self, k, v)
 
         have_metadata_db = bool(self.config_calibre_dir)
-        if have_metadata_db:
-            if not self.config_use_google_drive:
-                db_file = os.path.join(self.config_calibre_dir, 'metadata.db')
-                have_metadata_db = os.path.isfile(db_file)
+        if have_metadata_db and not self.config_use_google_drive:
+            db_file = os.path.join(self.config_calibre_dir, 'metadata.db')
+            have_metadata_db = os.path.isfile(db_file)
         self.db_configured = have_metadata_db
         constants.EXTENSIONS_UPLOAD = [x.lstrip().rstrip().lower() for x in self.config_upload_formats.split(',')]
         if os.environ.get('FLASK_DEBUG'):
@@ -360,30 +363,28 @@ def _migrate_table(session, orm_class):
                 session.query(column).first()
             except OperationalError as err:
                 log.debug("%s: %s", column_name, err.args[0])
-                if column.default is not None:
-                    if sys.version_info < (3, 0):
-                        if isinstance(column.default.arg, unicode):
-                            column.default.arg = column.default.arg.encode('utf-8')
+                if (
+                    column.default is not None
+                    and sys.version_info < (3, 0)
+                    and isinstance(column.default.arg, unicode)
+                ):
+                    column.default.arg = column.default.arg.encode('utf-8')
                 if column.default is None:
                     column_default = ""
+                elif isinstance(column.default.arg, bool):
+                    column_default = f"DEFAULT {int(column.default.arg)}"
                 else:
-                    if isinstance(column.default.arg, bool):
-                        column_default = "DEFAULT {}".format(int(column.default.arg))
-                    else:
-                        column_default = "DEFAULT `{}`".format(column.default.arg)
-                if isinstance(column.type, JSON):
-                    column_type = "JSON"
-                else:
-                    column_type = column.type
-                alter_table = text("ALTER TABLE %s ADD COLUMN `%s` %s %s" % (orm_class.__tablename__,
-                                                                        column_name,
-                                                                        column_type,
-                                                                        column_default))
+                    column_default = f"DEFAULT `{column.default.arg}`"
+                column_type = "JSON" if isinstance(column.type, JSON) else column.type
+                alter_table = text(
+                    f"ALTER TABLE {orm_class.__tablename__} ADD COLUMN `{column_name}` {column_type} {column_default}"
+                )
+
                 log.debug(alter_table)
                 session.execute(alter_table)
                 changed = True
             except json.decoder.JSONDecodeError as e:
-                log.error("Database corrupt column: {}".format(column_name))
+                log.error(f"Database corrupt column: {column_name}")
                 log.debug(e)
 
     if changed:
@@ -401,10 +402,14 @@ def autodetect_calibre_binary():
                         "C:\\program files\\calibre2\\ebook-convert.exe"]
     else:
         calibre_path = ["/opt/calibre/ebook-convert"]
-    for element in calibre_path:
-        if os.path.isfile(element) and os.access(element, os.X_OK):
-            return element
-    return ""
+    return next(
+        (
+            element
+            for element in calibre_path
+            if os.path.isfile(element) and os.access(element, os.X_OK)
+        ),
+        "",
+    )
 
 def autodetect_unrar_binary():
     if sys.platform == "win32":
@@ -412,10 +417,14 @@ def autodetect_unrar_binary():
                         "C:\\program files(x86)\\WinRar\\unRAR.exe"]
     else:
         calibre_path = ["/usr/bin/unrar"]
-    for element in calibre_path:
-        if os.path.isfile(element) and os.access(element, os.X_OK):
-            return element
-    return ""
+    return next(
+        (
+            element
+            for element in calibre_path
+            if os.path.isfile(element) and os.access(element, os.X_OK)
+        ),
+        "",
+    )
 
 def autodetect_kepubify_binary():
     if sys.platform == "win32":
@@ -423,10 +432,14 @@ def autodetect_kepubify_binary():
                         "C:\\program files(x86)\\kepubify\\kepubify-windows-64Bit.exe"]
     else:
         calibre_path = ["/opt/kepubify/kepubify-linux-64bit", "/opt/kepubify/kepubify-linux-32bit"]
-    for element in calibre_path:
-        if os.path.isfile(element) and os.access(element, os.X_OK):
-            return element
-    return ""
+    return next(
+        (
+            element
+            for element in calibre_path
+            if os.path.isfile(element) and os.access(element, os.X_OK)
+        ),
+        "",
+    )
 
 def _migrate_database(session):
     # make sure the table is created, if it does not exist
@@ -441,7 +454,6 @@ def load_configuration(session):
     if not session.query(_Settings).count():
         session.add(_Settings())
         session.commit()
-    conf = _ConfigSQL(session)
     # Migrate from global restrictions to user based restrictions
     #if bool(conf.config_default_show & constants.MATURE_CONTENT) and conf.config_denied_tags == "":
     #    conf.config_denied_tags = conf.config_mature_content_tags
@@ -449,11 +461,11 @@ def load_configuration(session):
     #    session.query(ub.User).filter(ub.User.mature_content != True). \
     #        update({"denied_tags": conf.config_mature_content_tags}, synchronize_session=False)
     #    session.commit()
-    return conf
+    return _ConfigSQL(session)
 
 def get_flask_session_key(session):
     flask_settings = session.query(_Flask_Settings).one_or_none()
-    if flask_settings == None:
+    if flask_settings is None:
         flask_settings = _Flask_Settings(os.urandom(32))
         session.add(flask_settings)
         session.commit()

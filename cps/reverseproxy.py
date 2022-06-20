@@ -63,19 +63,16 @@ class ReverseProxied(object):
 
     def __call__(self, environ, start_response):
         self.proxied = False
-        script_name = environ.get('HTTP_X_SCRIPT_NAME', '')
-        if script_name:
+        if script_name := environ.get('HTTP_X_SCRIPT_NAME', ''):
             self.proxied = True
             environ['SCRIPT_NAME'] = script_name
             path_info = environ.get('PATH_INFO', '')
             if path_info and path_info.startswith(script_name):
                 environ['PATH_INFO'] = path_info[len(script_name):]
 
-        scheme = environ.get('HTTP_X_SCHEME', '')
-        if scheme:
+        if scheme := environ.get('HTTP_X_SCHEME', ''):
             environ['wsgi.url_scheme'] = scheme
-        servr = environ.get('HTTP_X_FORWARDED_HOST', '')
-        if servr:
+        if servr := environ.get('HTTP_X_FORWARDED_HOST', ''):
             environ['HTTP_HOST'] = servr
             self.proxied = True
         return self.app(environ, start_response)

@@ -46,10 +46,10 @@ def connect(key=None, secret=None, enabled=True):
         _client = None
         return
 
-    if _client:
-        # make sure the configuration has not changed since last we used the client
-        if _client.client_key != key or _client.client_secret != secret:
-            _client = None
+    if _client and (
+        _client.client_key != key or _client.client_secret != secret
+    ):
+        _client = None
 
     if not _client:
         _client = GoodreadsClient(key, secret)
@@ -98,13 +98,13 @@ def get_other_books(author_info, library_books=None):
     for book in author_info.books:
         if book.isbn in identifiers:
             continue
-        if isinstance(book.gid, int):
-            if book.gid in identifiers:
-                continue
-        else:
-            if book.gid["#text"] in identifiers:
-                continue
-
+        if (
+            isinstance(book.gid, int)
+            and book.gid in identifiers
+            or not isinstance(book.gid, int)
+            and book.gid["#text"] in identifiers
+        ):
+            continue
         if Levenshtein and library_titles:
             goodreads_title = book._book_dict['title_without_series']
             if any(Levenshtein.ratio(goodreads_title, title) > 0.7 for title in library_titles):

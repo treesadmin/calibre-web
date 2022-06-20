@@ -91,10 +91,7 @@ def disable_failed_auth_redirect_for_blueprint(bp):
 
 
 def get_auth_token():
-    if "auth_token" in g:
-        return g.get("auth_token")
-    else:
-        return None
+    return g.get("auth_token") if "auth_token" in g else None
 
 
 def requires_kobo_auth(f):
@@ -123,10 +120,7 @@ kobo_auth = Blueprint("kobo_auth", __name__, url_prefix="/kobo_auth")
 @login_required
 def generate_auth_token(user_id):
     host_list = request.host.rsplit(':')
-    if len(host_list) == 1:
-        host = ':'.join(host_list)
-    else:
-        host = ':'.join(host_list[0:-1])
+    host = ':'.join(host_list) if len(host_list) == 1 else ':'.join(host_list[:-1])
     if host.startswith('127.') or host.lower() == 'localhost' or host.startswith('[::ffff:7f'):
         warning = _('PLease access calibre-web from non localhost to get valid api_endpoint for kobo device')
         return render_title_template(
@@ -154,7 +148,11 @@ def generate_auth_token(user_id):
 
         for book in books:
             formats = [data.format for data in book.data]
-            if not 'KEPUB' in formats and config.config_kepubifypath and 'EPUB' in formats:
+            if (
+                'KEPUB' not in formats
+                and config.config_kepubifypath
+                and 'EPUB' in formats
+            ):
                 helper.convert_book_format(book.id, config.config_calibre_dir, 'EPUB', 'KEPUB', current_user.name)
 
         return render_title_template(

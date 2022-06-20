@@ -54,11 +54,10 @@ class _Logger(logging.Logger):
                 self.exception(message, stack_info=True, *args, **kwargs)
             else:
                 self.error(message, *args, **kwargs)
+        elif is_debug_enabled():
+            self.exception(message, *args, **kwargs)
         else:
-            if is_debug_enabled():
-                self.exception(message, *args, **kwargs)
-            else:
-                self.error(message, *args, **kwargs)
+            self.error(message, *args, **kwargs)
 
 
     def debug_no_auth(self, message, *args, **kwargs):
@@ -93,7 +92,7 @@ def get_level_name(level):
 
 
 def is_valid_logfile(file_path):
-    if file_path == LOG_TO_STDERR or file_path == LOG_TO_STDOUT:
+    if file_path in [LOG_TO_STDERR, LOG_TO_STDOUT]:
         return True
     if not file_path:
         return True
@@ -134,7 +133,7 @@ def setup(log_file, log_level=None):
         r.setLevel(log_level)
 
     # Otherwise name get's destroyed on windows
-    if log_file != LOG_TO_STDERR and log_file != LOG_TO_STDOUT:
+    if log_file not in [LOG_TO_STDERR, LOG_TO_STDOUT]:
         log_file = _absolute_log_file(log_file, DEFAULT_LOG_FILE)
 
     previous_handler = r.handlers[0] if r.handlers else None
@@ -144,13 +143,12 @@ def setup(log_file, log_level=None):
             return "" if log_file == DEFAULT_LOG_FILE else log_file
         logging.debug("logging to %s level %s", log_file, r.level)
 
-    if log_file == LOG_TO_STDERR or log_file == LOG_TO_STDOUT:
-        if log_file == LOG_TO_STDOUT:
-            file_handler = StreamHandler(sys.stdout)
-            file_handler.baseFilename = log_file
-        else:
-            file_handler = StreamHandler(sys.stderr)
-            file_handler.baseFilename = log_file
+    if log_file == LOG_TO_STDERR:
+        file_handler = StreamHandler(sys.stderr)
+        file_handler.baseFilename = log_file
+    elif log_file == LOG_TO_STDOUT:
+        file_handler = StreamHandler(sys.stdout)
+        file_handler.baseFilename = log_file
     else:
         try:
             file_handler = RotatingFileHandler(log_file, maxBytes=100000, backupCount=2, encoding='utf-8')

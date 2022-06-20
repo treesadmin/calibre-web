@@ -58,7 +58,7 @@ class WorkerThread(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
 
-        self.dequeued = list()
+        self.dequeued = []
 
         self.doLock = threading.Lock()
         self.queue = ImprovedQueue()
@@ -69,7 +69,7 @@ class WorkerThread(threading.Thread):
     def add(cls, user, task):
         ins = cls.getInstance()
         ins.num += 1
-        log.debug("Add Task for user: {}: {}".format(user, task))
+        log.debug(f"Add Task for user: {user}: {task}")
         ins.queue.put(QueuedTask(
             num=ins.num,
             user=user,
@@ -87,9 +87,7 @@ class WorkerThread(threading.Thread):
         with self.doLock:
             dead = []
             alive = []
-            for x in self.dequeued:
-                (dead if x.task.dead else alive).append(x)
-
+            (dead if x.task.dead else alive).extend(iter(self.dequeued))
             # if the ones that we need to keep are within the trigger, do nothing else
             delta = len(self.dequeued) - len(dead)
             if delta > TASK_CLEANUP_TRIGGER:

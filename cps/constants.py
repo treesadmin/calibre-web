@@ -108,7 +108,7 @@ sidebar_settings = {
             }
 
 
-ADMIN_USER_ROLES        = sum(r for r in ALL_ROLES.values()) & ~ROLE_ANONYMOUS
+ADMIN_USER_ROLES = sum(ALL_ROLES.values()) & ~ROLE_ANONYMOUS
 ADMIN_USER_SIDEBAR      = (SIDEBAR_LIST << 1) - 1
 
 UPDATE_STABLE       = 0 << 0
@@ -132,7 +132,10 @@ env_CALIBRE_PORT = os.environ.get("CALIBRE_PORT", DEFAULT_PORT)
 try:
     DEFAULT_PORT = int(env_CALIBRE_PORT)
 except ValueError:
-    print('Environment variable CALIBRE_PORT has invalid value (%s), faling back to default (8083)' % env_CALIBRE_PORT)
+    print(
+        f'Environment variable CALIBRE_PORT has invalid value ({env_CALIBRE_PORT}), faling back to default (8083)'
+    )
+
 del env_CALIBRE_PORT
 
 
@@ -156,9 +159,7 @@ BookMeta = namedtuple('BookMeta', 'file_path, extension, title, author, cover, d
 
 STABLE_VERSION = {'version': '0.6.13 Beta'}
 
-NIGHTLY_VERSION = {}
-NIGHTLY_VERSION[0] = '$Format:%H$'
-NIGHTLY_VERSION[1] = '$Format:%cI$'
+NIGHTLY_VERSION = {0: '$Format:%H$', 1: '$Format:%cI$'}
 # NIGHTLY_VERSION[0] = 'bb7d2c6273ae4560e83950d36d64533343623a57'
 # NIGHTLY_VERSION[1] = '2018-09-09T10:13:08+02:00'
 
