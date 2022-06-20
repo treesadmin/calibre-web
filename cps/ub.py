@@ -62,9 +62,7 @@ searched_ids = {}
 
 
 def store_ids(result):
-    ids = list()
-    for element in result:
-        ids.append(element.id)
+    ids = [element.id for element in result]
     searched_ids[current_user.id] = ids
 
 
@@ -143,13 +141,15 @@ class UserBase:
         return [t.strip() for t in mct.split(",")]
 
     def get_view_property(self, page, prop):
-        if not self.view_settings.get(page):
-            return None
-        return self.view_settings[page].get(prop)
+        return (
+            self.view_settings[page].get(prop)
+            if self.view_settings.get(page)
+            else None
+        )
 
     def set_view_property(self, page, prop, value):
         if not self.view_settings.get(page):
-            self.view_settings[page] = dict()
+            self.view_settings[page] = {}
         self.view_settings[page][prop] = value
         try:
             flag_modified(self, "view_settings")
@@ -249,15 +249,18 @@ class Anonymous(AnonymousUserMixin, UserBase):
 
     def get_view_property(self, page, prop):
         if 'view' in flask_session:
-            if not flask_session['view'].get(page):
-                return None
-            return flask_session['view'][page].get(prop)
+            return (
+                flask_session['view'][page].get(prop)
+                if flask_session['view'].get(page)
+                else None
+            )
+
         return None
 
     def set_view_property(self, page, prop, value):
         if 'view' in flask_session:
             if not flask_session['view'].get(page):
-                flask_session['view'][page] = dict()
+                flask_session['view'][page] = {}
             flask_session['view'][page][prop] = value
         return None
 
@@ -390,9 +393,11 @@ class KoboStatistics(Base):
 @event.listens_for(Session, 'before_flush')
 def receive_before_flush(session, flush_context, instances):
     for change in itertools.chain(session.new, session.dirty):
-        if isinstance(change, (ReadBook, KoboStatistics, KoboBookmark)):
-            if change.kobo_reading_state:
-                change.kobo_reading_state.last_modified = datetime.datetime.utcnow()
+        if (
+            isinstance(change, (ReadBook, KoboStatistics, KoboBookmark))
+            and change.kobo_reading_state
+        ):
+            change.kobo_reading_state.last_modified = datetime.datetime.utcnow()
     # Maintain the last_modified bit for the Shelf table.
     for change in itertools.chain(session.new, session.deleted):
         if isinstance(change, BookShelf):
@@ -540,7 +545,7 @@ def migrate_readBook(engine, session):
             conn.execute("ALTER TABLE book_read_link ADD column 'last_time_started_reading' DATETIME")
             conn.execute("ALTER TABLE book_read_link ADD column 'times_started_reading' INTEGER DEFAULT 0")
         session.commit()
-    test = session.query(ReadBook).filter(ReadBook.last_modified == None).all()
+    test = session.query(ReadBook).filter(ReadBook.last_modified is None).all()
     for book in test:
         book.last_modified = datetime.datetime.utcnow()
     session.commit()
@@ -734,20 +739,23 @@ def init_db(app_db_path):
 
     if cli.user_credentials:
         username, password = cli.user_credentials.split(':', 1)
-        user = session.query(User).filter(func.lower(User.name) == username.lower()).first()
-        if user:
+        if (
+            user := session.query(User)
+            .filter(func.lower(User.name) == username.lower())
+            .first()
+        ):
             if not password:
                 print("Empty password is not allowed")
                 sys.exit(4)
             user.password = generate_password_hash(password)
             if session_commit() == "":
-                print("Password for user '{}' changed".format(username))
+                print(f"Password for user '{username}' changed")
                 sys.exit(0)
             else:
                 print("Failed changing password")
                 sys.exit(3)
         else:
-            print("Username '{}' not valid, can't change password".format(username))
+            print(f"Username '{username}' not valid, can't change password")
             sys.exit(3)
 
 

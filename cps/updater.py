@@ -124,11 +124,8 @@ class Updater(threading.Thread):
     def run(self):
         while True:
             self.can_run.wait()
-            if self.status > -1:
-                if self.do_work():
-                    break   # stop loop and end thread for restart
-            else:
-                break
+            if self.status > -1 and self.do_work() or self.status <= -1:
+                break   # stop loop and end thread for restart
 
     def pause(self):
         self.can_run.clear()
@@ -175,17 +172,13 @@ class Updater(threading.Thread):
 
     @classmethod
     def reduce_files(cls, remove_items, exclude_items):
-        rf = []
-        for item in remove_items:
-            if not item.startswith(exclude_items):
-                rf.append(item)
-        return rf
+        return [item for item in remove_items if not item.startswith(exclude_items)]
 
     @classmethod
     def moveallfiles(cls, root_src_dir, root_dst_dir):
         new_permissions = os.stat(root_dst_dir)
         log.debug('Performing Update on OS-System: %s', sys.platform)
-        change_permissions = (sys.platform == "win32" or sys.platform == "darwin")
+        change_permissions = sys.platform in ["win32", "darwin"]
         for src_dir, __, files in os.walk(root_src_dir):
             dst_dir = src_dir.replace(root_src_dir, root_dst_dir, 1)
             if not os.path.exists(dst_dir):
@@ -193,7 +186,7 @@ class Updater(threading.Thread):
                     os.makedirs(dst_dir)
                     log.debug('Create directory: {}', dst_dir)
                 except OSError as e:
-                    log.error('Failed creating folder: {} with error {}'.format(dst_dir, e))
+                    log.error(f'Failed creating folder: {dst_dir} with error {e}')
                 if change_permissions:
                     try:
                         os.chown(dst_dir, new_permissions.st_uid, new_permissions.st_gid)
@@ -212,15 +205,14 @@ class Updater(threading.Thread):
                         os.remove(dst_file)
                         log.debug('Remove file before copy: %s', dst_file)
                     except OSError as e:
-                        log.error('Failed removing file: {} with error {}'.format(dst_file, e))
-                else:
-                    if change_permissions:
-                        permission = new_permissions
+                        log.error(f'Failed removing file: {dst_file} with error {e}')
+                elif change_permissions:
+                    permission = new_permissions
                 try:
                     shutil.move(src_file, dst_dir)
                     log.debug('Move File %s to %s', src_file, dst_dir)
                 except OSError as ex:
-                    log.error('Failed moving file from {} to {} with error {}'.format(src_file, dst_dir, ex))
+                    log.error(f'Failed moving file from {src_file} to {dst_dir} with error {ex}')
                 if change_permissions:
                     try:
                         os.chown(dst_file, permission.st_uid, permission.st_gid)
@@ -233,17 +225,30 @@ class Updater(threading.Thread):
 
     def update_source(self, source, destination):
         # destination files
-        old_list = list()
+        old_list = []
         exclude = (
-            os.sep + 'app.db', os.sep + 'calibre-web.log1', os.sep + 'calibre-web.log2', os.sep + 'gdrive.db',
-            os.sep + 'vendor', os.sep + 'calibre-web.log', os.sep + '.git', os.sep + 'client_secrets.json',
-            os.sep + 'gdrive_credentials', os.sep + 'settings.yaml', os.sep + 'venv', os.sep + 'virtualenv',
-            os.sep + 'access.log', os.sep + 'access.log1', os.sep + 'access.log2',
-            os.sep + '.calibre-web.log.swp', os.sep + '_sqlite3.so', os.sep + 'cps' + os.sep + '.HOMEDIR',
-            os.sep + 'gmail.json'
+            f'{os.sep}app.db',
+            f'{os.sep}calibre-web.log1',
+            f'{os.sep}calibre-web.log2',
+            f'{os.sep}gdrive.db',
+            f'{os.sep}vendor',
+            f'{os.sep}calibre-web.log',
+            f'{os.sep}.git',
+            f'{os.sep}client_secrets.json',
+            f'{os.sep}gdrive_credentials',
+            f'{os.sep}settings.yaml',
+            f'{os.sep}venv',
+            f'{os.sep}virtualenv',
+            f'{os.sep}access.log',
+            f'{os.sep}access.log1',
+            f'{os.sep}access.log2',
+            f'{os.sep}.calibre-web.log.swp',
+            f'{os.sep}_sqlite3.so',
+            f'{os.sep}cps{os.sep}.HOMEDIR',
+            f'{os.sep}gmail.json',
         )
-        additional_path = self.is_venv()
-        if additional_path:
+
+        if additional_path := self.is_venv():
             exclude = exclude + (additional_path,)
 
         # check if we are in a package, rename cps.py to __init__.py
@@ -251,18 +256,19 @@ class Updater(threading.Thread):
             shutil.move(os.path.join(source, 'cps.py'), os.path.join(source, '__init__.py'))
 
         for root, dirs, files in os.walk(destination, topdown=True):
-            for name in files:
-                old_list.append(os.path.join(root, name).replace(destination, ''))
-            for name in dirs:
-                old_list.append(os.path.join(root, name).replace(destination, ''))
-        # source files
-        new_list = list()
-        for root, dirs, files in os.walk(source, topdown=True):
-            for name in files:
-                new_list.append(os.path.join(root, name).replace(source, ''))
-            for name in dirs:
-                new_list.append(os.path.join(root, name).replace(source, ''))
+            old_list.extend(
+                os.path.join(root, name).replace(destination, '') for name in files
+            )
 
+            old_list.extend(
+                os.path.join(root, name).replace(destination, '') for name in dirs
+            )
+
+        # source files
+        new_list = []
+        for root, dirs, files in os.walk(source, topdown=True):
+            new_list.extend(os.path.join(root, name).replace(source, '') for name in files)
+            new_list.extend(os.path.join(root, name).replace(source, '') for name in dirs)
         delete_files = self.one_minus_two(old_list, new_list)
 
         rf = self.reduce_files(delete_files, exclude)
@@ -294,13 +300,16 @@ class Updater(threading.Thread):
     @classmethod
     def _nightly_version_info(cls):
         if is_sha1(constants.NIGHTLY_VERSION[0]) and len(constants.NIGHTLY_VERSION[1]) > 0:
-            log.debug("Nightly version: {}, {}".format(constants.NIGHTLY_VERSION[0], constants.NIGHTLY_VERSION[1]))
+            log.debug(
+                f"Nightly version: {constants.NIGHTLY_VERSION[0]}, {constants.NIGHTLY_VERSION[1]}"
+            )
+
             return {'version': constants.NIGHTLY_VERSION[0], 'datetime': constants.NIGHTLY_VERSION[1]}
         return False
 
     @classmethod
     def _stable_version_info(cls):
-        log.debug("Stable version: {}".format(constants.STABLE_VERSION))
+        log.debug(f"Stable version: {constants.STABLE_VERSION}")
         return constants.STABLE_VERSION  # Current version
 
     @staticmethod
@@ -313,43 +322,41 @@ class Updater(threading.Thread):
             remaining_parents_cnt = None
 
         if remaining_parents_cnt is not None:
-            while True:
-                if remaining_parents_cnt == 0:
-                    break
+            while (
+                remaining_parents_cnt != 0
+                and parent_commit['sha'] != status['current_commit_hash']
+            ):
+                try:
+                    headers = {'Accept': 'application/vnd.github.v3+json'}
+                    r = requests.get(parent_commit['url'], headers=headers, timeout=10)
+                    r.raise_for_status()
+                    parent_data = r.json()
 
-                # check if we are more than one update behind if so, go up the tree
-                if parent_commit['sha'] != status['current_commit_hash']:
-                    try:
-                        headers = {'Accept': 'application/vnd.github.v3+json'}
-                        r = requests.get(parent_commit['url'], headers=headers, timeout=10)
-                        r.raise_for_status()
-                        parent_data = r.json()
+                    parent_commit_date = datetime.datetime.strptime(
+                        parent_data['committer']['date'], '%Y-%m-%dT%H:%M:%SZ') - tz
+                    parent_commit_date = format_datetime(
+                        parent_commit_date, format='short', locale=locale)
 
-                        parent_commit_date = datetime.datetime.strptime(
-                            parent_data['committer']['date'], '%Y-%m-%dT%H:%M:%SZ') - tz
-                        parent_commit_date = format_datetime(
-                            parent_commit_date, format='short', locale=locale)
-
-                        parents.append([parent_commit_date,
-                                        parent_data['message'].replace('\r\n', '<p>').replace('\n', '<p>')])
-                        parent_commit = parent_data['parents'][0]
-                        remaining_parents_cnt -= 1
-                    except Exception:
-                        # it isn't crucial if we can't get information about the parent
-                        break
-                else:
-                    # parent is our current version
+                    parents.append([parent_commit_date,
+                                    parent_data['message'].replace('\r\n', '<p>').replace('\n', '<p>')])
+                    parent_commit = parent_data['parents'][0]
+                    remaining_parents_cnt -= 1
+                except Exception:
+                    # it isn't crucial if we can't get information about the parent
                     break
         return parents
 
     @staticmethod
     def _load_nightly_data(repository_url, commit, status):
-        update_data = dict()
+        update_data = {}
         try:
             headers = {'Accept': 'application/vnd.github.v3+json'}
-            r = requests.get(repository_url + '/git/commits/' + commit['object']['sha'],
-                             headers=headers,
-                             timeout=10)
+            r = requests.get(
+                f'{repository_url}/git/commits/' + commit['object']['sha'],
+                headers=headers,
+                timeout=10,
+            )
+
             r.raise_for_status()
             update_data = r.json()
         except requests.exceptions.HTTPError as e:
@@ -366,7 +373,10 @@ class Updater(threading.Thread):
         tz = datetime.timedelta(seconds=time.timezone if (time.localtime().tm_isdst == 0) else time.altzone)
         if request_method == "GET":
             repository_url = _REPOSITORY_API_URL
-            status, commit = self._load_remote_data(repository_url + '/git/refs/heads/master')
+            status, commit = self._load_remote_data(
+                f'{repository_url}/git/refs/heads/master'
+            )
+
             parents = []
             if status['message'] != '':
                 return json.dumps(status)
@@ -420,24 +430,25 @@ class Updater(threading.Thread):
         return ''
 
     def _stable_updater_set_status(self, i, newer, status, parents, commit):
-        if i == -1 and newer == False:
-            status.update({
-                'update': True,
-                'success': True,
-                'message': _(
-                    u'Click on the button below to update to the latest stable version.'),
-                'history': parents
-            })
-            self.updateFile = commit[0]['zipball_url']
-        elif i == -1 and newer == True:
-            status.update({
-                'update': True,
-                'success': True,
-                'message': _(u'A new update is available. Click on the button below to '
-                             u'update to version: %(version)s', version=commit[0]['tag_name']),
-                'history': parents
-            })
-            self.updateFile = commit[0]['zipball_url']
+        if i == -1:
+            if newer == False:
+                status.update({
+                    'update': True,
+                    'success': True,
+                    'message': _(
+                        u'Click on the button below to update to the latest stable version.'),
+                    'history': parents
+                })
+                self.updateFile = commit[0]['zipball_url']
+            elif newer == True:
+                status.update({
+                    'update': True,
+                    'success': True,
+                    'message': _(u'A new update is available. Click on the button below to '
+                                 u'update to version: %(version)s', version=commit[0]['tag_name']),
+                    'history': parents
+                })
+                self.updateFile = commit[0]['zipball_url']
         return status
 
     def _stable_updater_parse_major_version(self, commit, i, parents, current_version, status):
@@ -469,7 +480,7 @@ class Updater(threading.Thread):
         if request_method == "GET":
             parents = []
             # repository_url = 'https://api.github.com/repos/flatpak/flatpak/releases'  # test URL
-            repository_url = _REPOSITORY_API_URL + '/releases?per_page=100'
+            repository_url = f'{_REPOSITORY_API_URL}/releases?per_page=100'
             status, commit = self._load_remote_data(repository_url)
             if status['message'] != '':
                 return json.dumps(status)
@@ -540,7 +551,7 @@ class Updater(threading.Thread):
     def _get_request_path(self):
         if config.config_updatechannel == constants.UPDATE_STABLE:
             return self.updateFile
-        return _REPOSITORY_API_URL + '/zipball/master'
+        return f'{_REPOSITORY_API_URL}/zipball/master'
 
     def _load_remote_data(self, repository_url):
         status = {

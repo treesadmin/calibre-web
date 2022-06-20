@@ -48,8 +48,11 @@ class OAuthBackend(SQLAlchemyBackend):
         super(OAuthBackend, self).__init__(model, session, user, user_id, user_required, anon_user, cache)
 
     def get(self, blueprint, user=None, user_id=None):
-        if self.provider_id + '_oauth_token' in session and session[self.provider_id + '_oauth_token'] != '':
-            return session[self.provider_id + '_oauth_token']
+        if (
+            f'{self.provider_id}_oauth_token' in session
+            and session[f'{self.provider_id}_oauth_token'] != ''
+        ):
+            return session[f'{self.provider_id}_oauth_token']
         # check cache
         cache_key = self.make_cache_key(blueprint=blueprint, user=user, user_id=user_id)
         token = self.cache.get(cache_key)
@@ -66,8 +69,14 @@ class OAuthBackend(SQLAlchemyBackend):
                   for ref in (user, self.user, blueprint.config.get("user")))
 
         use_provider_user_id = False
-        if self.provider_id + '_oauth_user_id' in session and session[self.provider_id + '_oauth_user_id'] != '':
-            query = query.filter_by(provider_user_id=session[self.provider_id + '_oauth_user_id'])
+        if (
+            f'{self.provider_id}_oauth_user_id' in session
+            and session[f'{self.provider_id}_oauth_user_id'] != ''
+        ):
+            query = query.filter_by(
+                provider_user_id=session[f'{self.provider_id}_oauth_user_id']
+            )
+
             use_provider_user_id = True
 
         if self.user_required and not u and not uid and not use_provider_user_id:

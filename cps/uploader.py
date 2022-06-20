@@ -75,11 +75,11 @@ def process(tmp_file_path, original_file_name, original_file_extension, rarExecu
     meta = None
     extension_upper = original_file_extension.upper()
     try:
-        if ".PDF" == extension_upper:
+        if extension_upper == ".PDF":
             meta = pdf_meta(tmp_file_path, original_file_name, original_file_extension)
         elif extension_upper in [".KEPUB", ".EPUB"] and use_epub_meta is True:
             meta = epub.get_epub_info(tmp_file_path, original_file_name, original_file_extension)
-        elif ".FB2" == extension_upper and use_fb2_meta is True:
+        elif extension_upper == ".FB2" and use_fb2_meta is True:
             meta = fb2.get_fb2_info(tmp_file_path, original_file_extension)
         elif extension_upper in ['.CBZ', '.CBT', '.CBR']:
             meta = comic.get_comic_info(tmp_file_path,
@@ -118,7 +118,7 @@ def parse_xmp(pdf_file):
     try:
         xmp_info = pdf_file.getXmpMetadata()
     except Exception as ex:
-        log.debug('Can not read XMP metadata {}'.format(ex))
+        log.debug(f'Can not read XMP metadata {ex}')
         return None
 
     if xmp_info:
@@ -127,11 +127,7 @@ def parse_xmp(pdf_file):
         except AttributeError:
             xmp_author = ['']
 
-        if xmp_info.dc_title:
-            xmp_title = xmp_info.dc_title['x-default']
-        else:
-            xmp_title = ''
-
+        xmp_title = xmp_info.dc_title['x-default'] if xmp_info.dc_title else ''
         if xmp_info.dc_description:
             xmp_description = xmp_info.dc_description['x-default']
         else:
@@ -139,9 +135,7 @@ def parse_xmp(pdf_file):
 
         languages = []
         try:
-            for i in xmp_info.dc_language:
-                #calibre-web currently only takes one language.
-                languages.append(isoLanguages.get_lang3(i))
+            languages.extend(isoLanguages.get_lang3(i) for i in xmp_info.dc_language)
         except AttributeError:
             languages.append('')
 
@@ -163,7 +157,7 @@ def parse_xmp(pdf_file):
     try:
         xmp_info = pdf_file.getXmpMetadata()
     except Exception as ex:
-        log.debug('Can not read XMP metadata {}'.format(ex))
+        log.debug(f'Can not read XMP metadata {ex}')
         return None
 
     if xmp_info:
@@ -171,12 +165,8 @@ def parse_xmp(pdf_file):
             xmp_author = xmp_info.dc_creator # list
         except AttributeError:
             xmp_author = ['Unknown']
-        
-        if xmp_info.dc_title: 
-            xmp_title = xmp_info.dc_title['x-default']
-        else:
-            xmp_title = ''
 
+        xmp_title = xmp_info.dc_title['x-default'] if xmp_info.dc_title else ''
         if xmp_info.dc_description:
             xmp_description = xmp_info.dc_description['x-default']
         else:
@@ -184,11 +174,10 @@ def parse_xmp(pdf_file):
 
         languages = []
         try:
-            for i in xmp_info.dc_language:
-                languages.append(isoLanguages.get_lang3(i))
+            languages.extend(isoLanguages.get_lang3(i) for i in xmp_info.dc_language)
         except AttributeError:
             languages.append('')
-        
+
         xmp_tags = ', '.join(xmp_info.dc_subject)
         xmp_publisher = ', '.join(xmp_info.dc_publisher)
 
@@ -227,10 +216,10 @@ def pdf_meta(tmp_file_path, original_file_name, original_file_extension):
         tags = ""
 
     if doc_info:
-        if author == '':
+        if not author:
             author = ' & '.join(split_authors([doc_info.author])) if doc_info.author else u'Unknown'
         if title == '':
-            title = doc_info.title if doc_info.title else original_file_name
+            title = doc_info.title or original_file_name
         if subject == '':
             subject = doc_info.subject
         if tags == '' and '/Keywords' in doc_info:
@@ -256,10 +245,10 @@ def pdf_preview(tmp_file_path, tmp_dir):
     if use_generic_pdf_cover:
         return None
     try:
-        cover_file_name = os.path.splitext(tmp_file_path)[0] + ".cover.jpg"
+        cover_file_name = f"{os.path.splitext(tmp_file_path)[0]}.cover.jpg"
         with Image() as img:
             img.options["pdf:use-cropbox"] = "true"
-            img.read(filename=tmp_file_path + '[0]', resolution=150)
+            img.read(filename=f'{tmp_file_path}[0]', resolution=150)
             img.compression_quality = 88
             if img.alpha_channel:
                 img.alpha_channel = 'remove'
@@ -282,10 +271,7 @@ def get_versions():
     else:
         IVersion = u'not installed'
         WVersion = u'not installed'
-    if use_pdf_meta:
-        PVersion='v'+PyPdfVersion
-    else:
-        PVersion=u'not installed'
+    PVersion = f'v{PyPdfVersion}' if use_pdf_meta else u'not installed'
     if lxmlversion:
         XVersion = 'v'+'.'.join(map(str, lxmlversion))
     else:

@@ -37,7 +37,7 @@ from .about import collect_stats
 log = logger.create()
 
 def assemble_logfiles(file_name):
-    log_list = sorted(glob.glob(file_name + '*'), reverse=True)
+    log_list = sorted(glob.glob(f'{file_name}*'), reverse=True)
     wfd = StringIO()
     for f in log_list:
         with open(f, 'r') as fd:
@@ -48,8 +48,11 @@ def assemble_logfiles(file_name):
                      attachment_filename=os.path.basename(file_name))
 
 def send_debug():
-    file_list = glob.glob(logger.get_logfile(config.config_logfile) + '*')
-    file_list.extend(glob.glob(logger.get_accesslogfile(config.config_access_logfile) + '*'))
+    file_list = glob.glob(f'{logger.get_logfile(config.config_logfile)}*')
+    file_list.extend(
+        glob.glob(f'{logger.get_accesslogfile(config.config_access_logfile)}*')
+    )
+
     for element in [logger.LOG_TO_STDOUT, logger.LOG_TO_STDERR]:
         if element in file_list:
             file_list.remove(element)

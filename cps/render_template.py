@@ -35,10 +35,20 @@ def get_sidebar_config(kwargs=None):
         content = isinstance(content, (User, LocalProxy)) and not content.role_anonymous()
     else:
         content = 'conf' in kwargs
-    sidebar = list()
-    sidebar.append({"glyph": "glyphicon-book", "text": _('Books'), "link": 'web.index', "id": "new",
-                    "visibility": constants.SIDEBAR_RECENT, 'public': True, "page": "root",
-                    "show_text": _('Show recent books'), "config_show":False})
+    sidebar = [
+        {
+            "glyph": "glyphicon-book",
+            "text": _('Books'),
+            "link": 'web.index',
+            "id": "new",
+            "visibility": constants.SIDEBAR_RECENT,
+            'public': True,
+            "page": "root",
+            "show_text": _('Show recent books'),
+            "config_show": False,
+        }
+    ]
+
     sidebar.append({"glyph": "glyphicon-fire", "text": _('Hot Books'), "link": 'web.books_list', "id": "hot",
                     "visibility": constants.SIDEBAR_HOT, 'public': True, "page": "hot",
                     "show_text": _('Show Hot Books'), "config_show": True})
@@ -104,12 +114,12 @@ def get_readbooks_ids():
     if not config.config_read_column:
         readBooks = ub.session.query(ub.ReadBook).filter(ub.ReadBook.user_id == int(current_user.id))\
             .filter(ub.ReadBook.read_status == ub.ReadBook.STATUS_FINISHED).all()
-        return frozenset([x.book_id for x in readBooks])
+        return frozenset(x.book_id for x in readBooks)
     else:
         try:
             readBooks = calibre_db.session.query(db.cc_classes[config.config_read_column])\
                 .filter(db.cc_classes[config.config_read_column].value == True).all()
-            return frozenset([x.book for x in readBooks])
+            return frozenset(x.book for x in readBooks)
         except (KeyError, AttributeError):
             log.error("Custom Column No.%d is not existing in calibre database", config.config_read_column)
             return []

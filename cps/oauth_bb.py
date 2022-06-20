@@ -68,39 +68,45 @@ def register_oauth_blueprint(cid, show_name):
 
 
 def register_user_with_oauth(user=None):
-    all_oauth = {}
-    for oauth_key in oauth_check.keys():
-        if str(oauth_key) + '_oauth_user_id' in session and session[str(oauth_key) + '_oauth_user_id'] != '':
-            all_oauth[oauth_key] = oauth_check[oauth_key]
+    all_oauth = {
+        oauth_key: oauth_check[oauth_key]
+        for oauth_key in oauth_check.keys()
+        if f'{str(oauth_key)}_oauth_user_id' in session
+        and session[f'{str(oauth_key)}_oauth_user_id'] != ''
+    }
+
     if len(all_oauth.keys()) == 0:
         return
     if user is None:
         flash(_(u"Register with %(provider)s", provider=", ".join(list(all_oauth.values()))), category="success")
     else:
-        for oauth_key in all_oauth.keys():
+        for oauth_key in all_oauth:
             # Find this OAuth token in the database, or create it
             query = ub.session.query(ub.OAuth).filter_by(
                 provider=oauth_key,
-                provider_user_id=session[str(oauth_key) + "_oauth_user_id"],
+                provider_user_id=session[f"{str(oauth_key)}_oauth_user_id"],
             )
+
             try:
                 oauth_key = query.one()
                 oauth_key.user_id = user.id
             except NoResultFound:
                 # no found, return error
                 return
-            ub.session_commit("User {} with OAuth for provider {} registered".format(user.name, oauth_key))
+            ub.session_commit(
+                f"User {user.name} with OAuth for provider {oauth_key} registered"
+            )
 
 
 def logout_oauth_user():
     for oauth_key in oauth_check.keys():
-        if str(oauth_key) + '_oauth_user_id' in session:
-            session.pop(str(oauth_key) + '_oauth_user_id')
+        if f'{str(oauth_key)}_oauth_user_id' in session:
+            session.pop(f'{str(oauth_key)}_oauth_user_id')
 
 
 def oauth_update_token(provider_id, token, provider_user_id):
-    session[provider_id + "_oauth_user_id"] = provider_user_id
-    session[provider_id + "_oauth_token"] = token
+    session[f"{provider_id}_oauth_user_id"] = provider_user_id
+    session[f"{provider_id}_oauth_token"] = token
 
     # Find this OAuth token in the database, or create it
     query = ub.session.query(ub.OAuth).filter_by(
@@ -147,7 +153,7 @@ def bind_oauth_or_register(provider_id, provider_user_id, redirect_url, provider
                     ub.session.add(oauth_entry)
                     ub.session.commit()
                     flash(_(u"Link to %(oauth)s Succeeded", oauth=provider_name), category="success")
-                    log.info("Link to {} Succeeded".format(provider_name))
+                    log.info(f"Link to {provider_name} Succeeded")
                     return redirect(url_for('web.profile'))
                 except Exception as ex:
                     log.debug_or_exception(ex)
@@ -156,12 +162,12 @@ def bind_oauth_or_register(provider_id, provider_user_id, redirect_url, provider
                 flash(_(u"Login failed, No User Linked With OAuth Account"), category="error")
             log.info('Login failed, No User Linked With OAuth Account')
             return redirect(url_for('web.login'))
-            # return redirect(url_for('web.login'))
-            # if config.config_public_reg:
-            #   return redirect(url_for('web.register'))
-            # else:
-            #    flash(_(u"Public registration is not enabled"), category="error")
-            #    return redirect(url_for(redirect_url))
+                    # return redirect(url_for('web.login'))
+                    # if config.config_public_reg:
+                    #   return redirect(url_for('web.register'))
+                    # else:
+                    #    flash(_(u"Public registration is not enabled"), category="error")
+                    #    return redirect(url_for(redirect_url))
     except (NoResultFound, AttributeError):
         return redirect(url_for(redirect_url))
 
@@ -173,16 +179,13 @@ def get_oauth_status():
     )
     try:
         oauths = query.all()
-        for oauth_entry in oauths:
-            status.append(int(oauth_entry.provider))
+        status.extend(int(oauth_entry.provider) for oauth_entry in oauths)
         return status
     except NoResultFound:
         return None
 
 
 def unlink_oauth(provider):
-    if request.host_url + 'me' != request.referrer:
-        pass
     query = ub.session.query(ub.OAuth).filter_by(
         provider=provider,
         user_id=current_user.id,
@@ -196,7 +199,7 @@ def unlink_oauth(provider):
                 ub.session.commit()
                 logout_oauth_user()
                 flash(_(u"Unlink to %(oauth)s Succeeded", oauth=oauth_check[provider]), category="success")
-                log.info("Unlink to {} Succeeded".format(oauth_check[provider]))
+                log.info(f"Unlink to {oauth_check[provider]} Succeeded")
             except Exception as ex:
                 log.debug_or_exception(ex)
                 ub.session.rollback()
@@ -213,7 +216,7 @@ def generate_oauth_blueprints():
             oauthProvider.provider_name = provider
             oauthProvider.active = False
             ub.session.add(oauthProvider)
-            ub.session_commit("{} Blueprint Created".format(provider))
+            ub.session_commit(f"{provider} Blueprint Created")
 
     oauth_ids = ub.session.query(ub.OAuthProvider).all()
     ele1 = dict(provider_name='github',

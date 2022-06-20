@@ -64,14 +64,12 @@ def init_cache_busting(app):
         return filename.split("?", 1)[0]
 
     @app.url_defaults
-    # pylint: disable=unused-variable
     def reverse_to_cache_busted_url(endpoint, values):
         """
         Make `url_for` produce busted filenames when using the 'static' endpoint.
         """
         if endpoint == "static":
-            file_hash = bust_filename(values["filename"])
-            if file_hash:
+            if file_hash := bust_filename(values["filename"]):
                 values["q"] = file_hash
 
     def debusting_static_view(filename):

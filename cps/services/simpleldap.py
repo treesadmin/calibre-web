@@ -66,8 +66,8 @@ def init_app(app, config):
     app.config['LDAP_BASE_DN'] = config.config_ldap_dn
     app.config['LDAP_USER_OBJECT_FILTER'] = config.config_ldap_user_object
 
-    app.config['LDAP_USE_TLS'] = bool(config.config_ldap_encryption == 1)
-    app.config['LDAP_USE_SSL'] = bool(config.config_ldap_encryption == 2)
+    app.config['LDAP_USE_TLS'] = config.config_ldap_encryption == 1
+    app.config['LDAP_USE_SSL'] = config.config_ldap_encryption == 2
     app.config['LDAP_OPENLDAP'] = bool(config.config_ldap_openldap)
     app.config['LDAP_GROUP_OBJECT_FILTER'] = config.config_ldap_group_object_filter
     app.config['LDAP_GROUP_MEMBERS_FIELD'] = config.config_ldap_group_members_field
@@ -113,7 +113,7 @@ def bind_user(username, password):
             return result is not None, None
         return None, None       # User not found
     except (TypeError, AttributeError, KeyError) as ex:
-        error = ("LDAP bind_user: %s" % ex)
+        error = f"LDAP bind_user: {ex}"
         return None, error
     except LDAPException as ex:
         if ex.message == 'Invalid credentials':
@@ -121,8 +121,8 @@ def bind_user(username, password):
             return None, error
         if ex.message == "Can't contact LDAP server":
             # log.warning('LDAP Server down: %s', ex)
-            error = ('LDAP Server down: %s' % ex)
-            return None,  error
+            error = f'LDAP Server down: {ex}'
         else:
-            error = ('LDAP Server error: %s' % ex.message)
-            return None, error
+            error = f'LDAP Server error: {ex.message}'
+
+        return None,  error

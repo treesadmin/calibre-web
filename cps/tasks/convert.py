@@ -28,7 +28,7 @@ class TaskConvert(CalibreTask):
         self.kindle_mail = kindle_mail
         self.user = user
 
-        self.results = dict()
+        self.results = {}
 
     def run(self, worker_thread):
         self.worker_thread = worker_thread
@@ -36,26 +36,33 @@ class TaskConvert(CalibreTask):
             worker_db = db.CalibreDB(expire_on_commit=False)
             cur_book = worker_db.get_book(self.bookid)
             data = worker_db.get_book_format(self.bookid, self.settings['old_book_format'])
-            df = gdriveutils.getFileFromEbooksFolder(cur_book.path,
-                                                     data.name + "." + self.settings['old_book_format'].lower())
-            if df:
-                datafile = os.path.join(config.config_calibre_dir,
-                                        cur_book.path,
-                                        data.name + u"." + self.settings['old_book_format'].lower())
+            if df := gdriveutils.getFileFromEbooksFolder(
+                cur_book.path,
+                f"{data.name}." + self.settings['old_book_format'].lower(),
+            ):
+                datafile = os.path.join(
+                    config.config_calibre_dir,
+                    cur_book.path,
+                    f"{data.name}." + self.settings['old_book_format'].lower(),
+                )
+
                 if not os.path.exists(os.path.join(config.config_calibre_dir, cur_book.path)):
                     os.makedirs(os.path.join(config.config_calibre_dir, cur_book.path))
                 df.GetContentFile(datafile)
                 worker_db.session.close()
             else:
-                error_message = _(u"%(format)s not found on Google Drive: %(fn)s",
-                                  format=self.settings['old_book_format'],
-                                  fn=data.name + "." + self.settings['old_book_format'].lower())
+                error_message = _(
+                    u"%(format)s not found on Google Drive: %(fn)s",
+                    format=self.settings['old_book_format'],
+                    fn=f"{data.name}." + self.settings['old_book_format'].lower(),
+                )
+
                 worker_db.session.close()
                 return error_message
 
         filename = self._convert_ebook_format()
         if config.config_use_google_drive:
-            os.remove(self.file_path + u'.' + self.settings['old_book_format'].lower())
+            os.remove(f'{self.file_path}.' + self.settings['old_book_format'].lower())
 
         if filename:
             if config.config_use_google_drive:
@@ -168,12 +175,11 @@ class TaskConvert(CalibreTask):
         # move file
         if check == 0:
             converted_file = glob(os.path.join(os.path.dirname(file_path), "*.kepub.epub"))
-            if len(converted_file) == 1:
-                copyfile(converted_file[0], (file_path + format_new_ext))
-                os.unlink(converted_file[0])
-            else:
+            if len(converted_file) != 1:
                 return 1, _(u"Converted file not found or more than one file in folder %(folder)s",
                             folder=os.path.dirname(file_path))
+            copyfile(converted_file[0], (file_path + format_new_ext))
+            os.unlink(converted_file[0])
         return check, None
 
     def _convert_calibre(self, file_path, format_old_ext, format_new_ext):
@@ -186,14 +192,11 @@ class TaskConvert(CalibreTask):
             quotes = [1, 2]
             command = [config.config_converterpath, (file_path + format_old_ext),
                        (file_path + format_new_ext)]
-            quotes_index = 3
             if config.config_calibre:
                 parameters = config.config_calibre.split(" ")
-                for param in parameters:
+                for quotes_index, param in enumerate(parameters, start=3):
                     command.append(param)
                     quotes.append(quotes_index)
-                    quotes_index += 1
-
             p = process_open(command, quotes)
         except OSError as e:
             return 1, _(u"Ebook-converter failed: %(error)s", error=e)
@@ -205,10 +208,8 @@ class TaskConvert(CalibreTask):
             elif os.name == 'posix' and sys.version_info < (3, 0):
                 nextline = nextline.decode('utf-8')
             log.debug(nextline.strip('\r\n'))
-            # parse progress string from calibre-converter
-            progress = re.search(r"(\d+)%\s.*", nextline)
-            if progress:
-                self.progress = int(progress.group(1)) / 100
+            if progress := re.search(r"(\d+)%\s.*", nextline):
+                self.progress = int(progress[1]) / 100
                 if config.config_use_google_drive:
                     self.progress *= 0.9
 

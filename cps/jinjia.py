@@ -62,17 +62,17 @@ def shortentitle_filter(s, nchar=20):
         # if word longer than 20 chars truncate line and append '...', otherwise add whole word to result
         # string, and summarize total length to stop at chars given by nchar
         if len(line) > nchar:
-            res += line[:(nchar-3)] + '[..] '
+            res += f'{line[:(nchar-3)]}[..] '
             suml += nchar+3
         else:
-            res += line + ' '
+            res += f'{line} '
             suml += len(line) + 1
     return res.strip()
 
 
 @jinjia.app_template_filter('mimetype')
 def mimetype_filter(val):
-    return mimetypes.types_map.get('.' + val, 'application/octet-stream')
+    return mimetypes.types_map.get(f'.{val}', 'application/octet-stream')
 
 
 @jinjia.app_template_filter('formatdate')
@@ -99,10 +99,7 @@ def timestamptodate(date, fmt=None):
         int(date)/1000
     )
     native = date.replace(tzinfo=None)
-    if fmt:
-        time_format = fmt
-    else:
-        time_format = '%d %m %Y - %H:%S'
+    time_format = fmt or '%d %m %Y - %H:%S'
     return native.strftime(time_format)
 
 

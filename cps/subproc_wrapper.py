@@ -35,11 +35,10 @@ def process_open(command, quotes=(), env=None, sout=subprocess.PIPE, serr=subpro
         exc_command = " ".join(command)
         if sys.version_info < (3, 0):
             exc_command = exc_command.encode(sys.getfilesystemencoding())
+    elif sys.version_info < (3, 0):
+        exc_command = [x.encode(sys.getfilesystemencoding()) for x in command]
     else:
-        if sys.version_info < (3, 0):
-            exc_command = [x.encode(sys.getfilesystemencoding()) for x in command]
-        else:
-            exc_command = [x for x in command]
+        exc_command = list(command)
 
     return subprocess.Popen(exc_command, shell=False, stdout=sout, stderr=serr, universal_newlines=newlines, env=env) # nosec
 

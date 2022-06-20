@@ -57,14 +57,12 @@ COVER_EXTENSIONS = ['.png', '.webp', '.bmp', '.jpg', '.jpeg']
 
 def _cover_processing(tmp_file_name, img, extension):
     tmp_cover_name = os.path.join(os.path.dirname(tmp_file_name), 'cover.jpg')
-    if use_IM:
-        # convert to jpg because calibre only supports jpg
-        if extension in NO_JPEG_EXTENSIONS:
-            with Image(filename=tmp_file_name) as imgc:
-                imgc.format = 'jpeg'
-                imgc.transform_colorspace('rgb')
-                imgc.save(tmp_cover_name)
-                return tmp_cover_name
+    if use_IM and extension in NO_JPEG_EXTENSIONS:
+        with Image(filename=tmp_file_name) as imgc:
+            imgc.format = 'jpeg'
+            imgc.transform_colorspace('rgb')
+            imgc.save(tmp_cover_name)
+            return tmp_cover_name
 
     if not img:
         return None

@@ -106,8 +106,9 @@ def watch_gdrive():
 @login_required
 @admin_required
 def revoke_watch_gdrive():
-    last_watch_response = config.config_google_drive_watch_changes_response
-    if last_watch_response:
+    if (
+        last_watch_response := config.config_google_drive_watch_changes_response
+    ):
         try:
             gdriveutils.stopChannel(gdriveutils.Gdrive.Instance().drive, last_watch_response['id'],
                                     last_watch_response['resourceId'])
@@ -148,7 +149,13 @@ def on_received_watch_confirmation():
                     os.mkdir(tmp_dir)
 
                 log.info('Database file updated')
-                copyfile(dbpath, os.path.join(tmp_dir, "metadata.db_" + str(current_milli_time())))
+                copyfile(
+                    dbpath,
+                    os.path.join(
+                        tmp_dir, f"metadata.db_{str(current_milli_time())}"
+                    ),
+                )
+
                 log.info('Backing up existing and downloading updated metadata.db')
                 gdriveutils.downloadFile(None, "metadata.db", os.path.join(tmp_dir, "tmp_metadata.db"))
                 log.info('Setting up new DB')

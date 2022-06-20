@@ -30,14 +30,14 @@ try:
     from gevent import __version__ as _version
     from greenlet import GreenletExit
     import ssl
-    VERSION = 'Gevent ' + _version
+    VERSION = f'Gevent {_version}'
     _GEVENT = True
 except ImportError:
     from tornado.wsgi import WSGIContainer
     from tornado.httpserver import HTTPServer
     from tornado.ioloop import IOLoop
     from tornado import version as _version
-    VERSION = 'Tornado ' + _version
+    VERSION = f'Tornado {_version}'
     _GEVENT = False
 
 from . import logger
@@ -48,8 +48,8 @@ log = logger.create()
 
 def _readable_listen_address(address, port):
     if ':' in address:
-        address = "[" + address + "]"
-    return '%s:%s' % (address, port)
+        address = f"[{address}]"
+    return f'{address}:{port}'
 
 
 class WebServer(object):
@@ -73,16 +73,15 @@ class WebServer(object):
         self.listen_port = config.config_port
 
         if config.config_access_log:
-            log_name = "gevent.access" if _GEVENT else "tornado.access"
             formatter = logger.ACCESS_FORMATTER_GEVENT if _GEVENT else logger.ACCESS_FORMATTER_TORNADO
+            log_name = "gevent.access" if _GEVENT else "tornado.access"
             self.access_logger, logfile = logger.create_access_log(config.config_access_logfile, log_name, formatter)
             if logfile != config.config_access_logfile:
                 log.warning("Accesslog path %s not valid, falling back to default", config.config_access_logfile)
                 config.config_access_logfile = logfile
                 config.save()
-        else:
-            if not _GEVENT:
-                logger.get('tornado.access').disabled = True
+        elif not _GEVENT:
+            logger.get('tornado.access').disabled = True
 
         certfile_path = config.get_config_certfile()
         keyfile_path = config.get_config_keyfile()
@@ -115,9 +114,12 @@ class WebServer(object):
 
     def _make_gevent_socket(self):
         if os.name != 'nt':
-            unix_socket_file = os.environ.get("CALIBRE_UNIX_SOCKET")
-            if unix_socket_file:
-                return self._make_gevent_unix_socket(unix_socket_file), "unix:" + unix_socket_file
+            if unix_socket_file := os.environ.get("CALIBRE_UNIX_SOCKET"):
+                return (
+                    self._make_gevent_unix_socket(unix_socket_file),
+                    f"unix:{unix_socket_file}",
+                )
+
 
         if self.listen_address:
             return (self.listen_address, self.listen_port), None
@@ -152,11 +154,12 @@ class WebServer(object):
         # The value of __package__ indicates how Python was called. It may
         # not exist if a setuptools script is installed as an egg. It may be
         # set incorrectly for entry points created with pip on Windows.
-        if getattr(__main__, "__package__", None) is None or (
-            os.name == "nt"
+        if (
+            getattr(__main__, "__package__", None) is None
+            or os.name == "nt"
             and __main__.__package__ == ""
             and not os.path.exists(py_script)
-            and os.path.exists("{}.exe".format(py_script))
+            and os.path.exists(f"{py_script}.exe")
         ):
             # Executed a file, like "python app.py".
             py_script = os.path.abspath(py_script)
@@ -164,7 +167,9 @@ class WebServer(object):
             if os.name == "nt":
                 # Windows entry points have ".exe" extension and should be
                 # called directly.
-                if not os.path.exists(py_script) and os.path.exists("{}.exe".format(py_script)):
+                if not os.path.exists(py_script) and os.path.exists(
+                    f"{py_script}.exe"
+                ):
                     py_script += ".exe"
 
                 if (
@@ -174,23 +179,21 @@ class WebServer(object):
                     rv.pop(0)
 
             rv.append(py_script)
+        elif sys.argv[0] == "-m":
+            args = sys.argv
         else:
-            # Executed a module, like "python -m module".
-            if sys.argv[0] == "-m":
-                args = sys.argv
+            if os.path.isfile(py_script):
+                # Rewritten by Python from "-m script" to "/path/to/script.py".
+                py_module = __main__.__package__
+                name = os.path.splitext(os.path.basename(py_script))[0]
+
+                if name != "__main__":
+                    py_module += f".{name}"
             else:
-                if os.path.isfile(py_script):
-                    # Rewritten by Python from "-m script" to "/path/to/script.py".
-                    py_module = __main__.__package__
-                    name = os.path.splitext(os.path.basename(py_script))[0]
+                # Incorrectly rewritten by pydevd debugger from "-m script" to "script".
+                py_module = py_script
 
-                    if name != "__main__":
-                        py_module += ".{}".format(name)
-                else:
-                    # Incorrectly rewritten by pydevd debugger from "-m script" to "script".
-                    py_module = py_script
-
-                rv.extend(("-m", py_module.lstrip(".")))
+            rv.extend(("-m", py_module.lstrip(".")))
 
         rv.extend(args)
         return rv
@@ -245,7 +248,7 @@ class WebServer(object):
                 self._start_tornado()
         except Exception as ex:
             log.error("Error starting server: %s", ex)
-            print("Error starting server: %s" % ex)
+            print(f"Error starting server: {ex}")
             self.stop()
             return False
         finally:

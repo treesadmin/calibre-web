@@ -42,8 +42,7 @@ class Pagination(object):
     @property
     def last_offset(self):
         last = int(self.total_count) - int(self.per_page)
-        if last < 0:
-            last = 0
+        last = max(last, 0)
         return int(last)
 
     @property

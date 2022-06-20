@@ -133,7 +133,7 @@ def admin_forbidden():
 def shutdown():
     task = int(request.args.get("parameter").strip())
     showtext = {}
-    if task in (0, 1):  # valid commandos received
+    if task in {0, 1}:  # valid commandos received
         # close all database connections
         calibre_db.dispose()
         ub.dispose()
@@ -163,20 +163,19 @@ def admin():
     version = updater_thread.get_current_version_info()
     if version is False:
         commit = _(u'Unknown')
-    else:
-        if 'datetime' in version:
-            commit = version['datetime']
+    elif 'datetime' in version:
+        commit = version['datetime']
 
-            tz = timedelta(seconds=time.timezone if (time.localtime().tm_isdst == 0) else time.altzone)
-            form_date = datetime.strptime(commit[:19], "%Y-%m-%dT%H:%M:%S")
-            if len(commit) > 19:    # check if string has timezone
-                if commit[19] == '+':
-                    form_date -= timedelta(hours=int(commit[20:22]), minutes=int(commit[23:]))
-                elif commit[19] == '-':
-                    form_date += timedelta(hours=int(commit[20:22]), minutes=int(commit[23:]))
-            commit = format_datetime(form_date - tz, format='short', locale=get_locale())
-        else:
-            commit = version['version']
+        tz = timedelta(seconds=time.timezone if (time.localtime().tm_isdst == 0) else time.altzone)
+        form_date = datetime.strptime(commit[:19], "%Y-%m-%dT%H:%M:%S")
+        if len(commit) > 19:    # check if string has timezone
+            if commit[19] == '+':
+                form_date -= timedelta(hours=int(commit[20:22]), minutes=int(commit[23:]))
+            elif commit[19] == '-':
+                form_date += timedelta(hours=int(commit[20:22]), minutes=int(commit[23:]))
+        commit = format_datetime(form_date - tz, format='short', locale=get_locale())
+    else:
+        commit = version['version']
 
     allUser = ub.session.query(ub.User).all()
     email_settings = config.get_mail_settings()
@@ -286,7 +285,7 @@ def list_users():
         state = json.loads(request.args.get("state", "[]"))
 
     if sort != "state" and order:
-        order = text(sort + " " + order)
+        order = text(f"{sort} {order}")
     elif not state:
         order = ub.User.id.asc()
 
@@ -297,9 +296,14 @@ def list_users():
     total_count = filtered_count = all_user.count()
 
     if search:
-        all_user = all_user.filter(or_(func.lower(ub.User.name).ilike("%" + search + "%"),
-                                    func.lower(ub.User.kindle_mail).ilike("%" + search + "%"),
-                                    func.lower(ub.User.email).ilike("%" + search + "%")))
+        all_user = all_user.filter(
+            or_(
+                func.lower(ub.User.name).ilike(f"%{search}%"),
+                func.lower(ub.User.kindle_mail).ilike(f"%{search}%"),
+                func.lower(ub.User.email).ilike(f"%{search}%"),
+            )
+        )
+
     if state:
         users = calibre_db.get_checkbox_sorted(all_user.all(), state, off, limit, request.args.get("order", "").lower())
     else:
@@ -330,8 +334,8 @@ def delete_user():
     elif "userid" in user_ids:
         users = ub.session.query(ub.User).filter(ub.User.id == user_ids['userid'][0]).all()
     count = 0
-    errors = list()
-    success = list()
+    errors = []
+    success = []
     if not users:
         log.error("User not found")
         return Response(json.dumps({'type': "danger", 'message': _("User not found")}), mimetype='application/json')
@@ -344,10 +348,10 @@ def delete_user():
             errors.append({'type': "danger", 'message': str(ex)})
 
     if count == 1:
-        log.info("User {} deleted".format(user_ids))
+        log.info(f"User {user_ids} deleted")
         success = [{'type': "success", 'message': message}]
     elif count > 1:
-        log.info("Users {} deleted".format(user_ids))
+        log.info(f"Users {user_ids} deleted")
         success = [{'type': "success", 'message': _("{} users deleted successfully").format(count)}]
     success.extend(errors)
     return Response(json.dumps(success), mimetype='application/json')
@@ -357,10 +361,12 @@ def delete_user():
 @admin_required
 def table_get_locale():
     locale = babel.list_translations() + [LC('en')]
-    ret = list()
     current_locale = get_locale()
-    for loc in locale:
-        ret.append({'value': str(loc), 'text': loc.get_language_name(current_locale)})
+    ret = [
+        {'value': str(loc), 'text': loc.get_language_name(current_locale)}
+        for loc in locale
+    ]
+
     return json.dumps(ret)
 
 
@@ -369,10 +375,8 @@ def table_get_locale():
 @admin_required
 def table_get_default_lang():
     languages = calibre_db.speaking_language()
-    ret = list()
-    ret.append({'value': 'all', 'text': _('Show All')})
-    for lang in languages:
-        ret.append({'value': lang.lang_code, 'text': lang.name})
+    ret = [{'value': 'all', 'text': _('Show All')}]
+    ret.extend({'value': lang.lang_code, 'text': lang.name} for lang in languages)
     return json.dumps(ret)
 
 
@@ -387,16 +391,15 @@ def edit_list_user(param):
     # only one user is posted
     if "pk" in vals:
         users = [all_user.filter(ub.User.id == vals['pk'][0]).one_or_none()]
+    elif "pk[]" in vals:
+        users = all_user.filter(ub.User.id.in_(vals['pk[]'])).all()
     else:
-        if "pk[]" in vals:
-            users = all_user.filter(ub.User.id.in_(vals['pk[]'])).all()
-        else:
-            return _("Malformed request"), 400
+        return _("Malformed request"), 400
     if 'field_index' in vals:
         vals['field_index'] = vals['field_index'][0]
     if 'value' in vals:
         vals['value'] = vals['value'][0]
-    elif not ('value[]' in vals):
+    elif 'value[]' not in vals:
         return _("Malformed request"), 400
     for user in users:
         try:
@@ -422,38 +425,50 @@ def edit_list_user(param):
                     if user.name == "Guest" and value in \
                                  [constants.ROLE_ADMIN, constants.ROLE_PASSWD, constants.ROLE_EDIT_SHELFS]:
                         raise Exception(_("Guest can't have this role"))
-                    # check for valid value, last on checks for power of 2 value
-                    if value > 0 and value <= constants.ROLE_VIEWER and (value & value-1 == 0 or value == 1):
-                        if vals['value'] == 'true':
-                            user.role |= value
-                        elif vals['value'] == 'false':
-                            if value == constants.ROLE_ADMIN:
-                                if not ub.session.query(ub.User).\
-                                       filter(ub.User.role.op('&')(constants.ROLE_ADMIN) == constants.ROLE_ADMIN,
-                                              ub.User.id != user.id).count():
-                                    return Response(
-                                        json.dumps([{'type': "danger",
-                                                     'message':_(u"No admin user remaining, can't remove admin role",
-                                                                 nick=user.name)}]), mimetype='application/json')
-                            user.role &= ~value
-                        else:
-                            raise Exception(_("Value has to be true or false"))
-                    else:
+                    if (
+                        value <= 0
+                        or value > constants.ROLE_VIEWER
+                        or value & value - 1 != 0
+                        and value != 1
+                    ):
                         raise Exception(_("Invalid role"))
+                    if vals['value'] == 'true':
+                        user.role |= value
+                    elif vals['value'] == 'false':
+                        if (
+                            value == constants.ROLE_ADMIN
+                            and not ub.session.query(ub.User)
+                            .filter(
+                                ub.User.role.op('&')(constants.ROLE_ADMIN)
+                                == constants.ROLE_ADMIN,
+                                ub.User.id != user.id,
+                            )
+                            .count()
+                        ):
+                            return Response(
+                                json.dumps([{'type': "danger",
+                                             'message':_(u"No admin user remaining, can't remove admin role",
+                                                         nick=user.name)}]), mimetype='application/json')
+                        user.role &= ~value
+                    else:
+                        raise Exception(_("Value has to be true or false"))
                 elif param.startswith('sidebar'):
                     value = int(vals['field_index'])
                     if user.name == "Guest" and value == constants.SIDEBAR_READ_AND_UNREAD:
                         raise Exception(_("Guest can't have this view"))
-                    # check for valid value, last on checks for power of 2 value
-                    if value > 0 and value <= constants.SIDEBAR_LIST and (value & value-1 == 0 or value == 1):
-                        if vals['value'] == 'true':
-                            user.sidebar_view |= value
-                        elif vals['value'] == 'false':
-                            user.sidebar_view &= ~value
-                        else:
-                            raise Exception(_("Value has to be true or false"))
-                    else:
+                    if (
+                        value <= 0
+                        or value > constants.SIDEBAR_LIST
+                        or value & value - 1 != 0
+                        and value != 1
+                    ):
                         raise Exception(_("Invalid view"))
+                    if vals['value'] == 'true':
+                        user.sidebar_view |= value
+                    elif vals['value'] == 'false':
+                        user.sidebar_view &= ~value
+                    else:
+                        raise Exception(_("Value has to be true or false"))
                 elif param == 'locale':
                     if user.name == "Guest":
                         raise Exception(_("Guest's Locale is determined automatically and can't be set"))
@@ -493,23 +508,37 @@ def update_table_settings():
             pass
         ub.session.commit()
     except (InvalidRequestError, OperationalError):
-        log.error("Invalid request received: {}".format(request))
+        log.error(f"Invalid request received: {request}")
         return "Invalid request", 400
     return ""
 
 def check_valid_read_column(column):
-    if column != "0":
-        if not calibre_db.session.query(db.Custom_Columns).filter(db.Custom_Columns.id == column) \
-              .filter(and_(db.Custom_Columns.datatype == 'bool', db.Custom_Columns.mark_for_delete == 0)).all():
-            return False
-    return True
+    return bool(
+        column == "0"
+        or calibre_db.session.query(db.Custom_Columns)
+        .filter(db.Custom_Columns.id == column)
+        .filter(
+            and_(
+                db.Custom_Columns.datatype == 'bool',
+                db.Custom_Columns.mark_for_delete == 0,
+            )
+        )
+        .all()
+    )
 
 def check_valid_restricted_column(column):
-    if column != "0":
-        if not calibre_db.session.query(db.Custom_Columns).filter(db.Custom_Columns.id == column) \
-              .filter(and_(db.Custom_Columns.datatype == 'text', db.Custom_Columns.mark_for_delete == 0)).all():
-            return False
-    return True
+    return bool(
+        column == "0"
+        or calibre_db.session.query(db.Custom_Columns)
+        .filter(db.Custom_Columns.id == column)
+        .filter(
+            and_(
+                db.Custom_Columns.datatype == 'text',
+                db.Custom_Columns.mark_for_delete == 0,
+            )
+        )
+        .all()
+    )
 
 
 
@@ -600,7 +629,7 @@ def edit_domain(allow):
     vals = request.form.to_dict()
     answer = ub.session.query(ub.Registration).filter(ub.Registration.id == vals['pk']).first()
     answer.domain = vals['value'].replace('*', '%').replace('?', '_').lower()
-    return ub.session_commit("Registering Domains edited {}".format(answer.domain))
+    return ub.session_commit(f"Registering Domains edited {answer.domain}")
 
 
 @admi.route("/ajax/adddomain/<int:allow>", methods=['POST'])
@@ -613,7 +642,7 @@ def add_domain(allow):
     if not check:
         new_domain = ub.Registration(domain=domain_name, allow=allow)
         ub.session.add(new_domain)
-        ub.session_commit("Registering Domains added {}".format(domain_name))
+        ub.session_commit(f"Registering Domains added {domain_name}")
     return ""
 
 
@@ -624,7 +653,7 @@ def delete_domain():
     try:
         domain_id = request.form.to_dict()['domainid'].replace('*', '%').replace('?', '_').lower()
         ub.session.query(ub.Registration).filter(ub.Registration.id == domain_id).delete()
-        ub.session_commit("Registering Domains deleted {}".format(domain_id))
+        ub.session_commit(f"Registering Domains deleted {domain_id}")
         # If last domain was deleted, add all domains by default
         if not ub.session.query(ub.Registration).filter(ub.Registration.allow == 1).count():
             new_domain = ub.Registration(domain="%.%", allow=1)
@@ -672,7 +701,10 @@ def edit_restriction(res_type, user_id):
             elementlist = usr.list_allowed_tags()
             elementlist[int(element['id'][1:])] = element['Element']
             usr.allowed_tags = ','.join(elementlist)
-            ub.session_commit("Changed allowed tags of user {} to {}".format(usr.name, usr.allowed_tags))
+            ub.session_commit(
+                f"Changed allowed tags of user {usr.name} to {usr.allowed_tags}"
+            )
+
         if res_type == 3:  # CColumn per user
             if isinstance(user_id, int):
                 usr = ub.session.query(ub.User).filter(ub.User.id == int(user_id)).first()
@@ -681,7 +713,10 @@ def edit_restriction(res_type, user_id):
             elementlist = usr.list_allowed_column_values()
             elementlist[int(element['id'][1:])] = element['Element']
             usr.allowed_column_value = ','.join(elementlist)
-            ub.session_commit("Changed allowed columns of user {} to {}".format(usr.name, usr.allowed_column_value))
+            ub.session_commit(
+                f"Changed allowed columns of user {usr.name} to {usr.allowed_column_value}"
+            )
+
     if element['id'].startswith('d'):
         if res_type == 0:  # Tags as template
             elementlist = config.list_denied_tags()
@@ -701,7 +736,10 @@ def edit_restriction(res_type, user_id):
             elementlist = usr.list_denied_tags()
             elementlist[int(element['id'][1:])] = element['Element']
             usr.denied_tags = ','.join(elementlist)
-            ub.session_commit("Changed denied tags of user {} to {}".format(usr.name, usr.denied_tags))
+            ub.session_commit(
+                f"Changed denied tags of user {usr.name} to {usr.denied_tags}"
+            )
+
         if res_type == 3:  # CColumn per user
             if isinstance(user_id, int):
                 usr = ub.session.query(ub.User).filter(ub.User.id == int(user_id)).first()
@@ -710,7 +748,10 @@ def edit_restriction(res_type, user_id):
             elementlist = usr.list_denied_column_values()
             elementlist[int(element['id'][1:])] = element['Element']
             usr.denied_column_value = ','.join(elementlist)
-            ub.session_commit("Changed denied columns of user {} to {}".format(usr.name, usr.denied_column_value))
+            ub.session_commit(
+                f"Changed denied columns of user {usr.name} to {usr.denied_column_value}"
+            )
+
     return ""
 
 
@@ -718,7 +759,7 @@ def restriction_addition(element, list_func):
     elementlist = list_func()
     if elementlist == ['']:
         elementlist = []
-    if not element['add_element'] in elementlist:
+    if element['add_element'] not in elementlist:
         elementlist += [element['add_element']]
     return ','.join(elementlist)
 
@@ -777,10 +818,16 @@ def add_restriction(res_type, user_id):
             usr = current_user
         if 'submit_allow' in element:
             usr.allowed_tags = restriction_addition(element, usr.list_allowed_tags)
-            ub.session_commit("Changed allowed tags of user {} to {}".format(usr.name, usr.list_allowed_tags()))
+            ub.session_commit(
+                f"Changed allowed tags of user {usr.name} to {usr.list_allowed_tags()}"
+            )
+
         elif 'submit_deny' in element:
             usr.denied_tags = restriction_addition(element, usr.list_denied_tags)
-            ub.session_commit("Changed denied tags of user {} to {}".format(usr.name, usr.list_denied_tags()))
+            ub.session_commit(
+                f"Changed denied tags of user {usr.name} to {usr.list_denied_tags()}"
+            )
+
     if res_type == 3:  # CustomC per user
         if isinstance(user_id, int):
             usr = ub.session.query(ub.User).filter(ub.User.id == int(user_id)).first()
@@ -788,12 +835,16 @@ def add_restriction(res_type, user_id):
             usr = current_user
         if 'submit_allow' in element:
             usr.allowed_column_value = restriction_addition(element, usr.list_allowed_column_values)
-            ub.session_commit("Changed allowed columns of user {} to {}".format(usr.name,
-                                                                                usr.list_allowed_column_values()))
+            ub.session_commit(
+                f"Changed allowed columns of user {usr.name} to {usr.list_allowed_column_values()}"
+            )
+
         elif 'submit_deny' in element:
             usr.denied_column_value = restriction_addition(element, usr.list_denied_column_values)
-            ub.session_commit("Changed denied columns of user {} to {}".format(usr.name,
-                                                                               usr.list_denied_column_values()))
+            ub.session_commit(
+                f"Changed denied columns of user {usr.name} to {usr.list_denied_column_values()}"
+            )
+
     return ""
 
 

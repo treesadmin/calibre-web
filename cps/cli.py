@@ -29,8 +29,8 @@ from .constants import NIGHTLY_VERSION as _NIGHTLY_VERSION
 
 def version_info():
     if _NIGHTLY_VERSION[1].startswith('$Format'):
-        return "Calibre-Web version: %s - unkown git-clone" % _STABLE_VERSION['version']
-    return "Calibre-Web version: %s -%s" % (_STABLE_VERSION['version'], _NIGHTLY_VERSION[1])
+        return f"Calibre-Web version: {_STABLE_VERSION['version']} - unkown git-clone"
+    return f"Calibre-Web version: {_STABLE_VERSION['version']} -{_NIGHTLY_VERSION[1]}"
 
 
 parser = argparse.ArgumentParser(description='Calibre Web is a web app'
@@ -90,9 +90,7 @@ if (args.k and not args.c) or (not args.k and args.c):
 if args.k == "":
     keyfilepath = ""
 
-# handle and check ip address argument
-ip_address = args.i or None
-if ip_address:
+if ip_address := args.i or None:
     try:
         # try to parse the given ip address with socket
         if hasattr(socket, 'inet_pton'):
